@@ -30,10 +30,16 @@ import Bills, { BillDetail } from './pages/wallet/Bills'
 import type { BillFilter } from './pages/wallet/Bills'
 import RedPacket, { RedPacketRecords } from './pages/wallet/RedPacket'
 import Transfer from './pages/wallet/Transfer'
+import RelativeGift from './pages/wallet/RelativeGift'
 import RelativeCardPage from './pages/wallet/RelativeCard'
 import { RedPacketDetail, TransferDetail, RelativeCardDetail } from './pages/wallet/WalletDetail'
 import BankCards from './pages/wallet/BankCards'
 import { ChatIcon, ContactsIcon, DiscoverIcon, MeIcon } from './components/icons'
+import { formatMoney } from './utils/qr'
+import { checkAmount, deduct, payLabel } from './utils/pay'
+import PaySuccess from './pages/wallet/PaySuccess'
+import type { PaySuccessData } from './pages/wallet/PaySuccess'
+import PayPasswordSet from './pages/wallet/PayPasswordSet'
 import { addBill, appendMessage, loadBills, loadFriends, loadMessages, loadUiState, loadWallet, patchFriendMsg, saveFriends, saveMessages, saveUiState, updateWallet, uid } from './store'
 import type { Friend, Message, RelativeCard } from './types'
 
@@ -69,12 +75,15 @@ type View =
   | { name: 'redPacketRecords' }
   | { name: 'transfer'; friendId?: string; fromChat?: boolean }
   | { name: 'relativeCard' }
+  | { name: 'relativeGift'; friendId?: string; fromChat?: boolean }
   | { name: 'rpDetail'; friendId: string; msgId: string }
   | { name: 'tfDetail'; friendId: string; msgId: string }
   | { name: 'relativeCardDetail'; cardId: string; friendId?: string; fromChat?: boolean }
+  | { name: 'payPwd' }
+  | { name: 'paySuccess'; data: PaySuccessData }
   | { name: 'bankcards' }
 
-const WALLET_VIEWS = ['wallet', 'walletChange', 'walletFund', 'payCode', 'receiveCode', 'scan', 'bills', 'redPacket', 'redPacketRecords', 'transfer', 'relativeCard', 'rpDetail', 'tfDetail', 'relativeCardDetail', 'bankcards']
+const WALLET_VIEWS = ['wallet', 'walletChange', 'walletFund', 'payCode', 'receiveCode', 'scan', 'bills', 'redPacket', 'redPacketRecords', 'transfer', 'relativeCard', 'relativeGift', 'rpDetail', 'tfDetail', 'relativeCardDetail', 'bankcards', 'payPwd', 'paySuccess']
 
 const TABS: { key: Tab; label: string; icon: (active: boolean) => JSX.Element }[] = [
   { key: 'messages', label: '信息', icon: (a) => <ChatIcon active={a} /> },
@@ -186,42 +195,143 @@ export default function App() {
     }, 4000 + Math.random() * 5000)
   }
 
-  const submitRedPacket = (friendId: string, amount: number, blessing: string): string | null => {
+  const verifyPwd = (pwd: string | null): string | null => {
+    const w = loadWallet()
+    if (!w.payPassword) return null
+    if (pwd === null) return '请输入支付密码'
+    return pwd === w.payPassword ? null : '支付密码错误，请重试'
+  }
+
+  const submitRedPacket = (friendId: string, amount: number, blessing: string, payId: string, pwd: string | null): string | null => {
     const friend = loadFriends().find((f) => f.id === friendId)
     if (!friend) return '好友不存在'
-    if (amount > loadWallet().balance) return '零钱余额不足'
-    updateWallet((x) => ({ ...x, balance: Math.round((x.balance - amount) * 100) / 100 }))
-    addBill({ kind: '红包', title: `发给${friend.name}的红包`, amount: -amount, status: '已发出，等待领取', friendName: friend.name, note: blessing })
-    const msg: Message = { id: uid(), friendId, from: 'me', text: `[红包:${blessing}|${amount}]`, time: Date.now(), redpacket: { amount, blessing, status: '待领取' } }
+    const n = Math.round(amount * 100) / 100
+    if (!n || n <= 0 || n > 200) return '单个红包金额不可超过 200 元'
+    const w = loadWallet()
+    const a = checkAmount(w, payId, n)
+    if (a) return a
+    const v = verifyPwd(pwd)
+    if (v) return v
+    const label = payLabel(w, payId)
+    updateWallet((x) => deduct(x, payId, n))
+    addBill({ kind: '红包', title: `发给${friend.name}的红包`, amount: -n, status: '已发出，等待领取', friendName: friend.name, note: blessing })
+    const msg: Message = { id: uid(), friendId, from: 'me', text: `[红包:${blessing}|${n}]`, time: Date.now(), redpacket: { amount: n, blessing, status: '待领取' } }
     appendMessage(msg)
     refreshData()
-    setView({ name: 'chat', friendId })
     scheduleAIReceive(friendId, msg.id, 'redpacket')
+    setView({
+      name: 'paySuccess',
+      data: {
+        title: '红包已发出',
+        amount: n,
+        rows: [
+          { label: '收款人', value: friend.name },
+          { label: '祝福语', value: blessing || '恭喜发财，大吉大利' },
+          { label: '支付方式', value: label },
+        ],
+        back: { name: 'chat', friendId },
+      },
+    })
     return null
   }
 
-  const submitTransfer = (friendId: string, amount: number, note: string): string | null => {
+  const submitTransfer = (friendId: string, amount: number, note: string, payId: string, pwd: string | null): string | null => {
     const friend = loadFriends().find((f) => f.id === friendId)
     if (!friend) return '好友不存在'
-    if (amount > loadWallet().balance) return '零钱余额不足'
-    updateWallet((x) => ({ ...x, balance: Math.round((x.balance - amount) * 100) / 100 }))
-    addBill({ kind: '转账', title: `转账给${friend.name}`, amount: -amount, status: '已转账，待对方收款', friendName: friend.name, note: note || '转账' })
-    const msg: Message = { id: uid(), friendId, from: 'me', text: `[转账:${amount}|${note}]`, time: Date.now(), transfer: { amount, note, status: '待收款' } }
+    const n = Math.round(amount * 100) / 100
+    if (!n || n <= 0) return '请输入转账金额'
+    const w = loadWallet()
+    const a = checkAmount(w, payId, n)
+    if (a) return a
+    const v = verifyPwd(pwd)
+    if (v) return v
+    const label = payLabel(w, payId)
+    updateWallet((x) => deduct(x, payId, n))
+    addBill({ kind: '转账', title: `转账给${friend.name}`, amount: -n, status: '已转账，待对方收款', friendName: friend.name, note: note || '转账' })
+    const msg: Message = { id: uid(), friendId, from: 'me', text: `[转账:${n}|${note}]`, time: Date.now(), transfer: { amount: n, note, status: '待收款' } }
     appendMessage(msg)
     refreshData()
-    setView({ name: 'chat', friendId })
     scheduleAIReceive(friendId, msg.id, 'transfer')
+    setView({
+      name: 'paySuccess',
+      data: {
+        title: '转账成功',
+        amount: n,
+        rows: [
+          { label: '收款人', value: friend.name },
+          { label: '转账说明', value: note.trim() || '转账' },
+          { label: '支付方式', value: label },
+        ],
+        back: { name: 'chat', friendId },
+      },
+    })
     return null
   }
 
-  const giftRelativeCard = (card: RelativeCard) => {
-    const friend = loadFriends().find((f) => f.id === card.friendId)
-    if (!friend) return
-    const msg: Message = { id: uid(), friendId: card.friendId, from: 'me', text: `赠送给${card.friendName}的亲属卡`, time: Date.now(), relativeCard: { cardId: card.id, status: '待领取' } }
+  const submitGift = (friendId: string, limit: number, payId: string, pwd: string | null): string | null => {
+    const friend = loadFriends().find((f) => f.id === friendId)
+    if (!friend) return '好友不存在'
+    const n = Math.round(limit * 100) / 100
+    if (!n || n <= 0 || n > 3000) return '每月消费上限需在 0.01 - 3000 元之间'
+    const v = verifyPwd(pwd)
+    if (v) return v
+    const w = loadWallet()
+    const label = payLabel(w, payId)
+    const card: RelativeCard = { id: uid(), friendId: friend.id, friendName: friend.name, monthlyLimit: n, used: 0, direction: 'given', status: 'pending', createdAt: Date.now() }
+    updateWallet((x) => ({ ...x, relativeCards: [...x.relativeCards, card] }))
+    addBill({ kind: '亲属卡', title: `赠送亲属卡 · ${friend.name}`, amount: 0, status: '已赠送', note: `每月消费上限 ¥${formatMoney(n)}` })
+    const msg: Message = { id: uid(), friendId: friend.id, from: 'me', text: `赠送给${friend.name}的亲属卡`, time: Date.now(), relativeCard: { cardId: card.id, status: '待领取' } }
     appendMessage(msg)
     refreshData()
-    setView({ name: 'chat', friendId: card.friendId })
-    scheduleAIReceive(card.friendId, msg.id, 'rc')
+    scheduleAIReceive(friend.id, msg.id, 'rc')
+    setView({
+      name: 'paySuccess',
+      data: {
+        title: '亲属卡已赠送',
+        amount: n,
+        amountNote: '每月消费上限',
+        rows: [
+          { label: '赠送对象', value: friend.name },
+          { label: '代付账户', value: label },
+          { label: '状态', value: '待对方领取' },
+        ],
+        back: { name: 'chat', friendId: friend.id },
+      },
+    })
+    return null
+  }
+
+  const submitSpend = (cardId: string, amount: number, note: string, payId: string, pwd: string | null): string | null => {
+    const w = loadWallet()
+    const card = w.relativeCards.find((c) => c.id === cardId)
+    if (!card) return '亲属卡不存在'
+    const n = Math.round(amount * 100) / 100
+    if (!n || n <= 0) return '请输入正确的金额'
+    const rest = Math.round((card.monthlyLimit - card.used) * 100) / 100
+    if (n > rest) return '超过本卡当月剩余额度'
+    const a = checkAmount(w, payId, n)
+    if (a) return a
+    const v = verifyPwd(pwd)
+    if (v) return v
+    const label = payLabel(w, payId)
+    updateWallet((x) => ({
+      ...deduct(x, payId, n),
+      relativeCards: x.relativeCards.map((c) => (c.id === cardId ? { ...c, used: Math.round((c.used + n) * 100) / 100 } : c)),
+    }))
+    addBill({ kind: '亲属卡', title: `${card.friendName} 的亲属卡消费`, amount: -n, status: `已用${label}支付`, friendName: card.friendName, note: note.trim() || '亲属卡消费' })
+    setView({
+      name: 'paySuccess',
+      data: {
+        title: '支付成功',
+        amount: n,
+        rows: [
+          { label: '消费项目', value: `${card.friendName} 的亲属卡` },
+          { label: '支付方式', value: label },
+        ],
+        back: { name: 'relativeCard' },
+      },
+    })
+    return null
   }
 
   const openWalletPage = (page: 'change' | 'fund' | 'paycode' | 'receivecode' | 'scan' | 'bills' | 'redpacket' | 'redpacketRecords' | 'transfer' | 'relatives' | 'bankcards') => {
@@ -258,6 +368,7 @@ export default function App() {
         onOpenLocation={() => setView({ name: 'location', friendId: view.friendId })}
         onOpenRedPacket={() => setView({ name: 'redPacket', friendId: view.friendId, fromChat: true })}
         onOpenTransfer={() => setView({ name: 'transfer', friendId: view.friendId, fromChat: true })}
+        onOpenRelativeGift={() => setView({ name: 'relativeGift', friendId: view.friendId, fromChat: true })}
         onOpenRedPacketDetail={(friendId, msgId) => setView({ name: 'rpDetail', friendId, msgId })}
         onOpenTransferDetail={(friendId, msgId) => setView({ name: 'tfDetail', friendId, msgId })}
         onOpenRelativeCardDetail={(cardId) => setView({ name: 'relativeCardDetail', cardId, friendId: view.friendId, fromChat: true })}
@@ -281,7 +392,7 @@ export default function App() {
       />
     )
   } else if (view.name === 'wallet') {
-    content = <WalletHome onBack={backToTabs} onOpen={openWalletPage} />
+    content = <WalletHome onBack={backToTabs} onOpen={openWalletPage} onOpenPassword={() => setView({ name: 'payPwd' })} />
   } else if (view.name === 'walletChange') {
     content = (
       <Change
@@ -326,7 +437,25 @@ export default function App() {
       />
     )
   } else if (view.name === 'relativeCard') {
-    content = <RelativeCardPage onBack={() => setView({ name: 'wallet' })} onGift={giftRelativeCard} />
+    content = (
+      <RelativeCardPage
+        onBack={() => setView({ name: 'wallet' })}
+        onGiftSubmit={submitGift}
+        onSpendSubmit={submitSpend}
+      />
+    )
+  } else if (view.name === 'relativeGift') {
+    content = (
+      <RelativeGift
+        friendId={view.friendId}
+        friendName={friends.find((f) => f.id === view.friendId)?.name}
+        friendAvatar={friends.find((f) => f.id === view.friendId)?.avatar}
+        onBack={() => (view.fromChat ? setView({ name: 'chat', friendId: view.friendId ?? '' }) : setView({ name: 'wallet' }))}
+        onSubmit={submitGift}
+      />
+    )
+  } else if (view.name === 'paySuccess') {
+    content = <PaySuccess data={view.data} onDone={() => setView(view.data.back)} />
   } else if (view.name === 'rpDetail') {
     const rpMsg = messages.find((m) => m.id === view.msgId && m.friendId === view.friendId)
     content = rpMsg ? (
@@ -359,6 +488,8 @@ export default function App() {
         <div className="empty-hint">亲属卡不存在</div>
       </div>
     )
+  } else if (view.name === 'payPwd') {
+    content = <PayPasswordSet onBack={() => setView({ name: 'wallet' })} />
   } else if (view.name === 'bankcards') {
     content = <BankCards onBack={() => setView({ name: 'wallet' })} />
   } else if (view.name === 'chatSettings') {

@@ -364,6 +364,11 @@ export function updateWallet(fn: (w: WalletState) => WalletState): WalletState {
   return next
 }
 
+/** 设置或关闭支付密码：传 6 位密码为开启/修改，传 null 为关闭 */
+export function setPayPassword(p: string | null) {
+  updateWallet((w) => ({ ...w, ...(p ? { payPassword: p } : { payPassword: undefined }) }))
+}
+
 export function loadBills(): Bill[] {
   return read(BILLS_KEY, [])
 }

@@ -222,18 +222,25 @@ export default function Messages({
               <Avatar name={friend.name} src={friend.avatar} size={50} />
               <div className="row-main">
                 <div className="row-top">
-                  <span className="row-title">{friend.remark?.trim() || friend.name}</span>
+                  <span className="row-title-wrap">
+                    <span className="row-title">{friend.remark?.trim() || friend.name}</span>
+                    {friend.muted && (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="row-muted-inline" aria-label="已开启免打扰">
+                        <path
+                          d="M12 4.5a4.7 4.7 0 0 0-4.7 4.7c0 4.3-1.4 6.1-1.4 6.1h12.2s-1.4-1.8-1.4-6.1A4.7 4.7 0 0 0 12 4.5Z"
+                          stroke="#a2a2a8"
+                          strokeWidth="1.8"
+                          strokeLinejoin="round"
+                        />
+                        <path d="M10.4 18.7a1.9 1.9 0 0 0 3.2 0" stroke="#a2a2a8" strokeWidth="1.8" strokeLinecap="round" />
+                        <path d="m5 4.7 14 14.6" stroke="#c6c6cb" strokeWidth="1.9" strokeLinecap="round" />
+                      </svg>
+                    )}
+                  </span>
                   {last && <span className="row-time">{formatTime(last.time)}</span>}
                 </div>
                 <div className="row-sub">
                   <span className="row-preview">{last ? (last.from === 'me' ? '我：' : '') + last.text : '开始聊天吧'}</span>
-                  {friend.muted && (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="row-muted-icon">
-                      <path d="M17 9.5a5 5 0 0 0-9.8-1.2M7 12.5v-1a5 5 0 0 1 .4-2M10 19h4M12 19v-2.2" stroke="#b8b8bd" strokeWidth="1.7" strokeLinecap="round" />
-                      <path d="M7.5 10.8c0 3.2-1.2 4.2-1.2 4.2h11.4s-1.2-1-1.2-4.2" stroke="#b8b8bd" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="m4 4 16 16" stroke="#ff3b30" strokeWidth="1.7" strokeLinecap="round" />
-                    </svg>
-                  )}
                   <Chevron />
                 </div>
               </div>

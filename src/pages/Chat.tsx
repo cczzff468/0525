@@ -36,6 +36,23 @@ const ERR_TEXT: Record<string, { desc: string; showSettings?: boolean }> = {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
+const DRAFT_PREFIX = 'chat-draft:'
+const loadDraftCache = (id: string) => {
+  try {
+    return localStorage.getItem(DRAFT_PREFIX + id) ?? ''
+  } catch {
+    return ''
+  }
+}
+const saveDraftCache = (id: string, text: string) => {
+  try {
+    localStorage.setItem(DRAFT_PREFIX + id, text)
+  } catch {
+    /* ignore */
+  }
+}
+const replyBusy: Record<string, boolean> = {}
+
 const fmtClock = (ts: number, withSec: boolean) => {
   const d = new Date(ts)
   const pad = (n: number) => n.toString().padStart(2, '0')
@@ -218,6 +235,7 @@ export default function Chat({
   onOpenLocation,
   onOpenRedPacket,
   onOpenTransfer,
+  onOpenRelativeGift,
   onOpenRedPacketDetail,
   onOpenTransferDetail,
   onOpenRelativeCardDetail,
@@ -234,6 +252,7 @@ export default function Chat({
   onOpenLocation: () => void
   onOpenRedPacket: () => void
   onOpenTransfer: () => void
+  onOpenRelativeGift: () => void
   onOpenRedPacketDetail: (friendId: string, msgId: string) => void
   onOpenTransferDetail: (friendId: string, msgId: string) => void
   onOpenRelativeCardDetail: (cardId: string) => void
@@ -242,7 +261,14 @@ export default function Chat({
   jumpTo?: string
 }) {
   const [messages, setMessages] = useState<Message[]>(() => loadMessages().filter((m) => m.friendId === friend.id).sort((a, b) => a.time - b.time))
-  const [draft, setDraft] = useState('')
+  const [draft, setDraftRaw] = useState<string>(() => loadDraftCache(friend.id))
+  const setDraft = (v: string | ((p: string) => string)) => {
+    setDraftRaw((prev) => {
+      const next = typeof v === 'function' ? (v as (p: string) => string)(prev) : v
+      saveDraftCache(friend.id, next)
+      return next
+    })
+  }
   const [typing, setTyping] = useState(false)
   const [streaming, setStreaming] = useState<string | null>(null)
   const [menuFor, setMenuFor] = useState<Message | null>(null)
@@ -269,19 +295,6 @@ export default function Chat({
   const patchMsg = (id: string, patch: Partial<Message>) => {
     patchFriendMsg(friend.id, id, patch)
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))
-  }
-
-  const rpStatusText = (m: Message) => {
-    const rp = m.redpacket!
-    if (rp.status === '已领取') return m.from === 'me' ? `${rp.openedBy ?? friend.name}已领取` : '你已领取'
-    return m.from === 'me' ? '待对方领取' : '待你领取'
-  }
-
-  const tfStatusText = (m: Message) => {
-    const t = m.transfer!
-    if (t.status === '已收款') return '已收款'
-    if (t.status === '已退还') return '已退还'
-    return m.from === 'me' ? '待对方收款' : '待你确认收款'
   }
 
   const rcCardLimit = (m: Message) => {
@@ -360,11 +373,6 @@ export default function Chat({
 
   useEffect(
     () => () => {
-      if (timerRef.current) {
-        window.clearTimeout(timerRef.current)
-        timerRef.current = 0
-        busyRef.current = false
-      }
       window.clearTimeout(pressRef.current)
       try {
         recogRef.current?.stop()
@@ -543,6 +551,8 @@ export default function Chat({
   }
 
   const respond = () => {
+    if (replyBusy[friend.id]) return
+    replyBusy[friend.id] = true
     busyRef.current = true
     timerRef.current = window.setTimeout(async () => {
       setTyping(true)
@@ -573,13 +583,15 @@ export default function Chat({
               await sleep(300 + Math.random() * 400)
               setTyping(false)
             }
-            commit([...msgsRef.current, units[i][j]])
+            commit([...loadMessages().filter((x) => x.friendId === friend.id), units[i][j]])
           }
         }
         busyRef.current = false
+        replyBusy[friend.id] = false
         if (truncated) setErrModal({ title: '回复被截断', desc: ERR_TEXT.toolong.desc })
         maybeAutoSummarize(friend.id).catch(() => {})
       } catch (err) {
+        replyBusy[friend.id] = false
         showError(err)
       }
     }, 900 + Math.random() * 600)
@@ -662,6 +674,10 @@ export default function Chat({
     onConsumeLocation()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingLocation])
+
+  useEffect(() => {
+    setDraftRaw(loadDraftCache(friend.id))
+  }, [friend.id])
 
   useEffect(() => {
     setMessages(loadMessages().filter((m) => m.friendId === friend.id).sort((a, b) => a.time - b.time))
@@ -863,6 +879,18 @@ export default function Chat({
             ) : (
               <span className="chat-nav-name">{friend.remark?.trim() || friend.name}</span>
             )}
+            {friend.muted && (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="chat-nav-muted" aria-label="已开启免打扰">
+                <path
+                  d="M12 4.5a4.7 4.7 0 0 0-4.7 4.7c0 4.3-1.4 6.1-1.4 6.1h12.2s-1.4-1.8-1.4-6.1A4.7 4.7 0 0 0 12 4.5Z"
+                  stroke="#a2a2a8"
+                  strokeWidth="1.8"
+                  strokeLinejoin="round"
+                />
+                <path d="M10.4 18.7a1.9 1.9 0 0 0 3.2 0" stroke="#a2a2a8" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="m5 4.7 14 14.6" stroke="#c6c6cb" strokeWidth="1.9" strokeLinecap="round" />
+              </svg>
+            )}
             <svg width="8" height="13" viewBox="0 0 9 15" fill="none">
               <path d="m1.5 1.5 5.5 6-5.5 6" stroke="#c7c7cc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -992,10 +1020,9 @@ export default function Chat({
                         </span>
                         <span className="rela-card-texts">
                           <span className="rela-card-title">亲属卡</span>
-                          <span className="rela-card-sub">{m.relativeCard.status === '已领取' ? `${friend.name}已领取` : `赠送给${friend.name} · 每月额度 ¥${rcCardLimit(m) || '--'}`}</span>
+                          <span className="rela-card-sub">赠送给{friend.name} · 每月额度 ¥{rcCardLimit(m) || '--'}</span>
                         </span>
                       </div>
-                      <span className={`pay-status ${m.relativeCard.status === '已领取' ? 'done' : ''}`}>{m.relativeCard.status === '已领取' ? '对方已领取' : m.from === 'me' ? '待对方领取' : '待领取'}</span>
                     </div>
                   ) : m.sticker && !m.sticker.emoji && !m.quote ? (
                     <div
@@ -1068,7 +1095,6 @@ export default function Chat({
                           <span className="rp-card-kind">领取红包</span>
                         </span>
                       </div>
-                      <span className={`pay-status ${m.redpacket.status === '已领取' ? 'done' : ''}`}>{rpStatusText(m)}</span>
                     </div>
                   ) : m.transfer && !m.quote ? (
                     <div
@@ -1085,11 +1111,16 @@ export default function Chat({
                       <div className="tf-card">
                         <span className="tf-card-icon">¥</span>
                         <span className="tf-card-texts">
-                          <span className="tf-card-amount">{formatMoney(m.transfer.amount)}元</span>
-                          <span className="tf-card-note">{m.transfer.note}</span>
+                          <span className="tf-card-amount">¥{formatMoney(m.transfer.amount)}</span>
+                          {m.transfer.note && m.transfer.note !== '转账' ? (
+                            <span className="tf-card-note">{m.transfer.note}</span>
+                          ) : m.from === 'me' ? (
+                            <span className="tf-card-note">你发起了一笔转账</span>
+                          ) : (
+                            <span className="tf-card-note">转账</span>
+                          )}
                         </span>
                       </div>
-                      <span className={`pay-status ${m.transfer.status === '已收款' ? 'done' : ''}`}>{tfStatusText(m)}</span>
                     </div>
                   ) : (
                     <div
@@ -1432,6 +1463,21 @@ export default function Chat({
                     </svg>
                   </span>
                   <span className="plus-label">转账</span>
+                </button>
+                <button
+                  className="plus-item"
+                  onClick={() => {
+                    setPlusOpen(false)
+                    onOpenRelativeGift()
+                  }}
+                >
+                  <span className="plus-icon">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                      <rect x="3.5" y="5.5" width="17" height="13" rx="2.5" stroke="#7a7a80" strokeWidth="1.6" />
+                      <path d="M12 16.4c-2.3-1.6-3.8-3-3.8-4.6a2.2 2.2 0 0 1 3.8-1.4 2.2 2.2 0 0 1 3.8 1.4c0 1.6-1.5 3-3.8 4.6Z" stroke="#7a7a80" strokeWidth="1.6" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <span className="plus-label">亲属卡</span>
                 </button>
                 <button
                   className="plus-item"

@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { NavBar, Avatar, Modal } from '../../components/common'
 import { BackIcon } from '../../components/icons'
-import { addBill, loadFriends, loadWallet, updateWallet, uid } from '../../store'
+import { PayMethodRow, PayPicker, PayPwdPanel } from '../../components/PaySheet'
+import { loadFriends, loadWallet, updateWallet } from '../../store'
 import type { RelativeCard } from '../../types'
+import { checkAmount } from '../../utils/pay'
 import { formatMoney } from '../../utils/qr'
 
 const fmtFull = (t: number) => {
@@ -11,7 +13,15 @@ const fmtFull = (t: number) => {
   return `${d.getFullYear()}年${p(d.getMonth() + 1)}月${p(d.getDate())}日 ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-export default function RelativeCardPage({ onBack, onGift }: { onBack: () => void; onGift: (card: RelativeCard) => void }) {
+export default function RelativeCardPage({
+  onBack,
+  onGiftSubmit,
+  onSpendSubmit,
+}: {
+  onBack: () => void
+  onGiftSubmit: (friendId: string, limit: number, payId: string, pwd: string | null) => string | null
+  onSpendSubmit: (cardId: string, amount: number, note: string, payId: string, pwd: string | null) => string | null
+}) {
   const [tick, setTick] = useState(0)
   const [gift, setGift] = useState(false)
   const [spendCard, setSpendCard] = useState<RelativeCard | null>(null)
@@ -21,6 +31,10 @@ export default function RelativeCardPage({ onBack, onGift }: { onBack: () => voi
   const [note, setNote] = useState('')
   const [err, setErr] = useState('')
   const [hint, setHint] = useState('')
+  const [payId, setPayId] = useState('balance')
+  const [payOpen, setPayOpen] = useState(false)
+  const [pwdOpen, setPwdOpen] = useState(false)
+  const [pending, setPending] = useState<'gift' | 'spend'>('gift')
   const [pickFriend, setPickFriend] = useState(false)
   const [target, setTarget] = useState<{ id: string; name: string; avatar?: string } | null>(null)
   const w = (() => {
@@ -33,61 +47,79 @@ export default function RelativeCardPage({ onBack, onGift }: { onBack: () => voi
     window.setTimeout(() => setHint(''), 1600)
   }
 
-  const createCard = () => {
+  const unbind = (card: RelativeCard) => {
+    updateWallet((x) => ({ ...x, relativeCards: x.relativeCards.filter((c) => c.id !== card.id) }))
+    setTick((t) => t + 1)
+    flash(`已解绑 ${card.friendName} 的亲属卡`)
+  }
+
+  const runGift = (pwd: string | null): string | null => {
+    if (!target) {
+      if (pwd === null) setErr('请选择赠送对象')
+      return '请选择赠送对象'
+    }
     const n = Math.round(Number(limit) * 100) / 100
+    const e = onGiftSubmit(target.id, n, payId, pwd)
+    if (e && pwd === null) setErr(e)
+    return e
+  }
+
+  const tryGift = () => {
     if (!target) {
       setErr('请选择赠送对象')
       return
     }
+    const n = Math.round(Number(limit) * 100) / 100
     if (!n || n <= 0 || n > 3000) {
       setErr('每月消费上限需在 0.01 - 3000 元之间')
       return
     }
-    const card: RelativeCard = { id: uid(), friendId: target.id, friendName: target.name, monthlyLimit: n, used: 0, direction: 'given', status: 'pending', createdAt: Date.now() }
-    updateWallet((x) => ({ ...x, relativeCards: [...x.relativeCards, card] }))
-    addBill({ kind: '亲属卡', title: `赠送亲属卡 · ${target.name}`, amount: 0, status: '已赠送', note: `每月消费上限 ¥${formatMoney(n)}` })
-    setGift(false)
-    setTarget(null)
-    setLimit('200')
     setErr('')
-    setTick((t) => t + 1)
-    flash('亲属卡已赠送，对方领取后即可使用')
-    onGift(card)
+    setPending('gift')
+    if (loadWallet().payPassword) setPwdOpen(true)
+    else runGift(null)
   }
 
-  const spend = () => {
+  const runSpend = (pwd: string | null): string | null => {
+    if (!spendCard) {
+      if (pwd === null) setErr('请选择亲属卡')
+      return '请选择亲属卡'
+    }
+    const n = Math.round(Number(amount) * 100) / 100
+    const e = onSpendSubmit(spendCard.id, n, note, payId, pwd)
+    if (e && pwd === null) setErr(e)
+    return e
+  }
+
+  const trySpend = () => {
     if (!spendCard) return
     const n = Math.round(Number(amount) * 100) / 100
     if (!n || n <= 0) {
       setErr('请输入正确的金额')
       return
     }
-    if (n > spendCard.monthlyLimit - spendCard.used) {
+    const rest = Math.round((spendCard.monthlyLimit - spendCard.used) * 100) / 100
+    if (n > rest) {
       setErr('超过本卡当月剩余额度')
       return
     }
-    if (n > w.balance) {
-      setErr('零钱余额不足')
+    const a = checkAmount(w, payId, n)
+    if (a) {
+      setErr(a)
       return
     }
-    updateWallet((x) => ({
-      ...x,
-      balance: Math.round((x.balance - n) * 100) / 100,
-      relativeCards: x.relativeCards.map((c) => (c.id === spendCard.id ? { ...c, used: Math.round((c.used + n) * 100) / 100 } : c)),
-    }))
-    addBill({ kind: '亲属卡', title: `${spendCard.friendName} 的亲属卡消费`, amount: -n, status: '已从零钱扣除', friendName: spendCard.friendName, note: note.trim() || '亲属卡消费' })
-    setSpendCard(null)
+    setErr('')
+    setPending('spend')
+    if (loadWallet().payPassword) setPwdOpen(true)
+    else runSpend(null)
+  }
+
+  const openSpend = (c: RelativeCard) => {
+    setSpendCard(c)
     setAmount('')
     setNote('')
     setErr('')
-    setTick((t) => t + 1)
-    flash(`已从零钱扣除 ¥${formatMoney(n)}`)
-  }
-
-  const unbind = (card: RelativeCard) => {
-    updateWallet((x) => ({ ...x, relativeCards: x.relativeCards.filter((c) => c.id !== card.id) }))
-    setTick((t) => t + 1)
-    flash(`已解绑 ${card.friendName} 的亲属卡`)
+    setPayId('balance')
   }
 
   return (
@@ -101,9 +133,7 @@ export default function RelativeCardPage({ onBack, onGift }: { onBack: () => voi
         }
       />
       <div className="page-body">
-        <div className="relative-intro">
-          为爸妈、子女等亲人赠送亲属卡，对方消费时从你的零钱代付，每月上限由你设定。
-        </div>
+        <div className="relative-intro">为爸妈、子女等亲人赠送亲属卡，对方消费时由你代付，每月上限由你设定。</div>
         {w.relativeCards.length === 0 && (
           <div className="relative-empty">
             <span className="relative-empty-icon">亲</span>
@@ -134,10 +164,7 @@ export default function RelativeCardPage({ onBack, onGift }: { onBack: () => voi
                 <button
                   className="relative-card-spend"
                   onClick={() => {
-                    setSpendCard(c)
-                    setAmount('')
-                    setNote('')
-                    setErr('')
+                    openSpend(c)
                   }}
                 >
                   记一笔消费
@@ -146,7 +173,7 @@ export default function RelativeCardPage({ onBack, onGift }: { onBack: () => voi
             </div>
           )
         })}
-        <button className="btn-green-big relative-gift-btn" onClick={() => setGift(true)}>
+        <button className="btn-green-big relative-gift-btn" onClick={() => { setGift(true); setErr(''); setLimit('200'); setTarget(null) }}>
           赠送亲属卡
         </button>
       </div>
@@ -156,7 +183,7 @@ export default function RelativeCardPage({ onBack, onGift }: { onBack: () => voi
         title="赠送亲属卡"
         buttons={[
           { label: '取消', onClick: () => setGift(false) },
-          { label: '赠送', primary: true, onClick: createCard },
+          { label: '赠送', primary: true, onClick: tryGift },
         ]}
       >
         <button className="row relative-pick" onClick={() => setPickFriend(true)}>
@@ -180,6 +207,7 @@ export default function RelativeCardPage({ onBack, onGift }: { onBack: () => voi
           <span>¥</span>
           <input type="number" inputMode="decimal" placeholder="每月消费上限" value={limit} onChange={(e) => { setLimit(e.target.value); setErr('') }} />
         </div>
+        <PayMethodRow w={w} value={payId} onOpen={() => setPayOpen(true)} />
         {err && <div className="wallet-money-err">{err}</div>}
         <div className="wallet-money-tip">上限范围 0.01 - 3000 元，每月 1 日自动重置额度</div>
       </Modal>
@@ -209,7 +237,7 @@ export default function RelativeCardPage({ onBack, onGift }: { onBack: () => voi
         title={spendCard ? `${spendCard.friendName} 的亲属卡消费` : '记一笔'}
         buttons={[
           { label: '取消', onClick: () => setSpendCard(null) },
-          { label: '确认', primary: true, onClick: spend },
+          { label: '确认', primary: true, onClick: trySpend },
         ]}
       >
         {spendCard && <div className="wallet-money-tip">本月剩余额度 ¥{formatMoney(Math.max(spendCard.monthlyLimit - spendCard.used, 0))}</div>}
@@ -221,8 +249,18 @@ export default function RelativeCardPage({ onBack, onGift }: { onBack: () => voi
           <span style={{ fontSize: 13 }}>用途</span>
           <input placeholder="选填，如：早午餐" value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
+        <PayMethodRow w={w} value={payId} onOpen={() => setPayOpen(true)} />
         {err && <div className="wallet-money-err">{err}</div>}
       </Modal>
+
+      <PayPicker open={payOpen} onClose={() => setPayOpen(false)} w={w} value={payId} onSelect={(k) => { setPayId(k); setErr('') }} />
+
+      <PayPwdPanel
+        open={pwdOpen}
+        onClose={() => setPwdOpen(false)}
+        amountDesc={pending === 'gift' ? `每月消费上限 ¥${formatMoney(Math.round(Number(limit) * 100) / 100 || 0)}` : `消费金额 ¥${formatMoney(Math.round(Number(amount) * 100) / 100 || 0)}`}
+        onVerify={(p) => (pending === 'gift' ? runGift(p) : runSpend(p))}
+      />
 
       {hint && <div className="chat-toast">{hint}</div>}
 

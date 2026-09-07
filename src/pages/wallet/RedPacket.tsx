@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { NavBar, Avatar } from '../../components/common'
 import { BackIcon } from '../../components/icons'
+import { PayMethodRow, PayPicker, PayPwdPanel } from '../../components/PaySheet'
 import { loadBills, loadFriends, loadWallet } from '../../store'
+import { checkAmount } from '../../utils/pay'
 import { formatMoney } from '../../utils/qr'
 
 export default function RedPacket({
@@ -15,15 +17,25 @@ export default function RedPacket({
   friendName?: string
   friendAvatar?: string
   onBack: () => void
-  onSubmit: (friendId: string, amount: number, blessing: string) => string | null
+  onSubmit: (friendId: string, amount: number, blessing: string, payId: string, pwd: string | null) => string | null
 }) {
   const [amount, setAmount] = useState('')
   const [blessing, setBlessing] = useState('恭喜发财，大吉大利')
   const [err, setErr] = useState('')
+  const [payId, setPayId] = useState('balance')
+  const [payOpen, setPayOpen] = useState(false)
+  const [pwdOpen, setPwdOpen] = useState(false)
   const [target, setTarget] = useState<{ id: string; name: string; avatar?: string } | null>(
     friendId ? { id: friendId, name: friendName || '好友', avatar: friendAvatar } : null
   )
   const w = loadWallet()
+
+  const finish = (pwd: string | null): string | null => {
+    const n = Math.round(Number(amount) * 100) / 100
+    const e = onSubmit(target!.id, n, blessing.trim() || '恭喜发财，大吉大利', payId, pwd)
+    if (e && pwd === null) setErr(e)
+    return e
+  }
 
   const submit = () => {
     if (!target) {
@@ -39,12 +51,13 @@ export default function RedPacket({
       setErr('单个红包金额不可超过 200 元')
       return
     }
-    if (n > w.balance) {
-      setErr('零钱余额不足')
+    const a = checkAmount(w, payId, n)
+    if (a) {
+      setErr(a)
       return
     }
-    const e = onSubmit(target.id, n, blessing.trim() || '恭喜发财，大吉大利')
-    if (e) setErr(e)
+    if (loadWallet().payPassword) setPwdOpen(true)
+    else finish(null)
   }
 
   return (
@@ -87,6 +100,7 @@ export default function RedPacket({
                 </div>
                 <input className="rp-input" value={blessing} maxLength={25} onChange={(e) => setBlessing(e.target.value)} />
               </div>
+              <PayMethodRow w={w} value={payId} onOpen={() => setPayOpen(true)} />
             </div>
             <button className="rp-send-btn" onClick={submit}>
               塞钱进红包
@@ -114,6 +128,13 @@ export default function RedPacket({
           </div>
         )}
       </div>
+      <PayPicker open={payOpen} onClose={() => setPayOpen(false)} w={w} value={payId} onSelect={(k) => { setPayId(k); setErr('') }} />
+      <PayPwdPanel
+        open={pwdOpen}
+        onClose={() => setPwdOpen(false)}
+        amountDesc={`红包金额 ¥${formatMoney(Math.round(Number(amount) * 100) / 100 || 0)}`}
+        onVerify={(p) => finish(p)}
+      />
     </div>
   )
 }

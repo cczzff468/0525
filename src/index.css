@@ -225,9 +225,17 @@ button:disabled {
 
 .row-top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.row-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
 }
 
 .row-title {
@@ -236,6 +244,7 @@ button:disabled {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .row-sub {
@@ -3569,9 +3578,11 @@ button:disabled {
   background: #e9e9eb;
 }
 
-.row-muted-icon {
+.row-muted-inline {
   flex-shrink: 0;
-  margin-right: 2px;
+}
+.chat-nav-muted {
+  flex-shrink: 0;
 }
 
 .row-value {
@@ -5485,8 +5496,8 @@ button:disabled {
   align-items: center;
   gap: 12px;
   background: linear-gradient(135deg, #f8684f, #e5533d);
-  border-radius: 10px;
-  padding: 12px 14px;
+  border-radius: 8px;
+  padding: 20px 14px;
   color: #fff;
 }
 .rp-card-icon {
@@ -5534,9 +5545,9 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: linear-gradient(135deg, #ffb84d, #f5a623);
-  border-radius: 10px;
-  padding: 12px 14px;
+  background: #fa8c16;
+  border-radius: 8px;
+  padding: 20px 14px;
   color: #fff;
 }
 .tf-card-icon {
@@ -5580,8 +5591,8 @@ button:disabled {
   align-items: center;
   gap: 12px;
   background: linear-gradient(135deg, #34c985, #18a95b);
-  border-radius: 10px;
-  padding: 12px 14px;
+  border-radius: 8px;
+  padding: 20px 14px;
   color: #fff;
 }
 .rela-card-icon {
@@ -5622,8 +5633,8 @@ button:disabled {
   align-items: center;
   gap: 11px;
   min-width: 236px;
-  padding: 12px 14px;
-  border-radius: 12px;
+  padding: 20px 16px;
+  border-radius: 8px;
   color: #fff;
 }
 .receipt-card.rp {
@@ -5631,8 +5642,8 @@ button:disabled {
   box-shadow: 0 2px 10px rgba(229, 83, 61, 0.24);
 }
 .receipt-card.tf {
-  background: linear-gradient(135deg, #ffb84d, #f5a623);
-  box-shadow: 0 2px 10px rgba(245, 166, 35, 0.22);
+  background: #fa8c16;
+  box-shadow: 0 2px 10px rgba(250, 140, 22, 0.28);
 }
 .receipt-card.rc {
   background: linear-gradient(135deg, #34c985, #18a95b);
@@ -5812,14 +5823,52 @@ button:disabled {
 }
 
 /* 转账 */
+.transfer-page {
+  background: linear-gradient(180deg, #f2fbf6 0%, #f2f3f5 300px);
+}
 .transfer-page .page-body {
-  padding: 14px 14px 30px;
+  padding: 6px 14px 30px;
+}
+.tf-pick-title {
+  padding: 10px 4px 12px;
+  font-size: 13px;
+  color: #8e8e93;
+}
+.tf-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0 4px;
+}
+.tf-hero-name {
+  margin-top: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.tf-hero-change {
+  margin-top: 7px;
+  border: none;
+  background: none;
+  color: #07c160;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.tf-form {
+  margin-bottom: 16px;
+}
+.tf-tip {
+  text-align: center;
+  font-size: 11px;
+  color: #9a9aa0;
+  margin-top: 14px;
 }
 .transfer-amount {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  padding: 28px 8px 22px;
+  padding: 18px 8px 22px;
   justify-content: center;
 }
 .transfer-cny {
@@ -5828,10 +5877,11 @@ button:disabled {
   color: #07c160;
 }
 .transfer-amount input {
-  width: 190px;
+  width: auto;
+  min-width: 0;
   border: none;
   outline: none;
-  text-align: left;
+  text-align: center;
   font-size: 38px;
   font-weight: 700;
   color: #1a1a1a;
@@ -5884,6 +5934,108 @@ button:disabled {
   font-size: 12px;
   color: #8e8e93;
   text-align: center;
+}
+
+/* 赠送亲属卡 */
+.rg-page {
+  background: linear-gradient(180deg, #f0faf5 0%, #f2f3f5 300px);
+}
+.rg-page .navbar {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: none;
+}
+.rg-page .page-body {
+  background: transparent;
+}
+.rg-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 0 20px;
+}
+.rg-head-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #2fbf63, #07c160);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px rgba(7, 193, 96, 0.3);
+}
+.rg-head-title {
+  margin-top: 12px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #2b2b2b;
+}
+.rg-head-sub {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #9a9aa0;
+}
+.rg-target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  margin-bottom: 14px;
+}
+.rg-target-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.rg-target-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.rg-target-sub {
+  font-size: 11px;
+  color: #9a9aa0;
+}
+.rg-target-arrow {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 6px;
+}
+.rg-form {
+  margin-bottom: 16px;
+}
+.rg-amount span {
+  color: #07c160;
+}
+.rg-submit-btn {
+  width: 100%;
+  height: 48px;
+  border: none;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #2fbf63, #07c160);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 1px;
+  box-shadow: 0 5px 16px rgba(7, 193, 96, 0.26);
+}
+.rg-submit-btn:active {
+  filter: brightness(0.95);
+  transform: scale(0.99);
+}
+.rg-tip {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 11px;
+  color: #9a9aa0;
 }
 
 /* 亲属卡 */
@@ -7121,4 +7273,436 @@ button:disabled {
 }
 .bank-save-btn:active {
   filter: brightness(0.95);
+}
+
+/* ==================== 支付体系 ==================== */
+/* 支付方式行 */
+.pay-method-row {
+  background: none;
+  border: 0;
+  width: 100%;
+}
+.pay-method-name {
+  font-size: 14px;
+  color: #1a1a1a;
+  white-space: nowrap;
+}
+.pay-method-tail {
+  font-size: 11px;
+  color: #9a9aa0;
+  white-space: nowrap;
+}
+
+/* 支付方式选择弹层 */
+.payp-pick-list {
+  display: flex;
+  flex-direction: column;
+}
+.payp-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 2px;
+  border: none;
+  border-bottom: 0.5px solid #ececee;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+.payp-pick-row:last-child {
+  border-bottom: none;
+}
+.payp-pick-ico {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  flex: none;
+}
+.payp-pick-ico.bal {
+  background: linear-gradient(135deg, #2fd66f, #07c160);
+}
+.payp-pick-ico.bank {
+  background: linear-gradient(135deg, #6ba8ff, #1a7dff);
+}
+.payp-pick-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.payp-pick-name {
+  font-size: 15px;
+  color: #1a1a1a;
+}
+.payp-pick-desc {
+  font-size: 12px;
+  color: #8e8e93;
+}
+.payp-pick-radio {
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #c7c7cc;
+  border-radius: 50%;
+  flex: none;
+  position: relative;
+}
+.payp-pick-row.on .payp-pick-radio {
+  border-color: #07c160;
+}
+.payp-pick-row.on .payp-pick-radio::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #07c160;
+}
+.payp-pick-hint {
+  padding-top: 12px;
+  text-align: center;
+  font-size: 11px;
+  color: #9a9aa0;
+}
+
+/* 6 位支付密码 */
+.sixpwd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  width: 100%;
+}
+.sixpwd-dots {
+  display: flex;
+  gap: 9px;
+  justify-content: center;
+}
+.sixpwd-dot {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #f6f6f8;
+  border: 1px solid #eaeaf0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sixpwd-dot.filled {
+  border-color: rgba(7, 193, 96, 0.6);
+  background: rgba(7, 193, 96, 0.08);
+}
+.sixpwd-dot.filled::after {
+  content: '';
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #07c160;
+}
+.sixpwd-area {
+  padding: 4px 0 2px;
+}
+.sixpwd-amount {
+  text-align: center;
+  color: #8e8e93;
+  font-size: 12px;
+  padding: 2px 0 18px;
+}
+.sixpwd-err {
+  text-align: center;
+  color: #fa5151;
+  font-size: 12px;
+  padding-top: 12px;
+}
+.sixpwd-forgot {
+  display: block;
+  margin: 14px auto 2px;
+  border: none;
+  background: none;
+  color: #576b95;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* 微信式数字键盘 */
+.keypad {
+  width: 100%;
+  max-width: 310px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+.keypad-key {
+  height: 46px;
+  border: none;
+  border-radius: 9px;
+  background: #f7f7f8;
+  color: #1a1a1a;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.keypad-key:active {
+  background: #e6e6ea;
+}
+.keypad-key.blank {
+  background: transparent;
+  pointer-events: none;
+}
+
+/* 支付密码设置页 */
+.pp-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 4px 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.pp-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c7c7cc;
+}
+.pp-status.on .pp-status-dot {
+  background: #07c160;
+}
+.pp-status-sub {
+  margin-left: auto;
+  font-size: 12px;
+  color: #9a9aa0;
+  font-weight: 400;
+}
+.pp-intro {
+  margin: 18px 6px 0;
+  font-size: 12px;
+  color: #8e8e93;
+  line-height: 1.7;
+}
+.pp-wizard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 12px 24px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.pp-step-dots {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.pp-wizard-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.pp-wizard-balance {
+  margin: 8px 0 28px;
+  font-size: 13px;
+  color: #8e8e93;
+}
+.pp-cancel {
+  margin-top: 30px;
+  padding: 6px 18px;
+  border: none;
+  background: none;
+  color: #576b95;
+  font-size: 14px;
+  cursor: pointer;
+}
+.wallet-pwd-btn {
+  padding: 4px;
+}
+
+/* 支付成功页 */
+.ps-page {
+  background: #f7f7f9;
+}
+.ps-page .navbar {
+  background: rgba(247, 247, 249, 0.92);
+}
+.ps-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 16px 40px;
+}
+.ps-check {
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2fd66f, #07c160);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 26px rgba(7, 193, 96, 0.3);
+}
+.ps-title {
+  margin-top: 22px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+.ps-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 12px;
+}
+.ps-amount-cny {
+  font-size: 26px;
+  font-weight: 700;
+  color: #07c160;
+}
+.ps-amount-num {
+  font-size: 40px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+.ps-amount-note {
+  font-size: 13px;
+  color: #8e8e93;
+}
+.ps-rows {
+  width: 100%;
+  margin-top: 30px;
+}
+.ps-row-value {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+  max-width: 60%;
+  text-align: right;
+}
+.ps-done {
+  width: 100%;
+  height: 48px;
+  border: none;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #2fd66f, #07c160);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 32px;
+  cursor: pointer;
+  box-shadow: 0 5px 16px rgba(7, 193, 96, 0.24);
+}
+.ps-done:active {
+  filter: brightness(0.95);
+}
+
+/* ============ 支付密码底部面板（键盘式） ============ */
+.pay-keyboard-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 150;
+  display: flex;
+  align-items: flex-end;
+  animation: fadeIn 0.15s ease-out;
+}
+.pay-keyboard-sheet {
+  width: 100%;
+  background: #f2f3f5;
+  border-radius: 14px 14px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 10px 0;
+  box-sizing: border-box;
+  animation: sheetslide 0.2s ease-out;
+}
+.pay-keyboard-bar {
+  width: 38px;
+  height: 5px;
+  border-radius: 3px;
+  background: #d1d3d7;
+  margin: 2px auto 8px;
+  flex: none;
+}
+.pay-keyboard-top {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2px 0 4px;
+  min-height: 40px;
+}
+.pay-keyboard-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.pay-keyboard-act {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  color: #576b95;
+  font-size: 15px;
+  padding: 6px 4px;
+  cursor: pointer;
+}
+.pay-keyboard-sheet .sixpwd-amount {
+  color: #8e8e93;
+  font-size: 12px;
+  padding: 0 0 10px;
+}
+.pay-keyboard-sheet .sixpwd-area {
+  padding: 4px 0 0;
+}
+.pay-keyboard-sheet .sixpwd-err,
+.pay-keyboard-sheet .sixpwd-forgot {
+  min-height: 18px;
+  margin: 0;
+  padding: 10px 0 0;
+}
+.pay-keyboard-pad {
+  width: 100%;
+  padding: 10px 2px calc(6px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+.pay-keyboard-pad .keypad {
+  max-width: none;
+  gap: 7px;
+}
+.pay-keyboard-pad .keypad-key {
+  height: 52px;
+  border-radius: 7px;
+  background: #fff;
+  font-size: 25px;
+}
+.pay-keyboard-pad .keypad-key.blank {
+  background: transparent;
+}
+.pay-keyboard-pad .keypad-key:active {
+  background: #e9e9ec;
+}
+@keyframes sheetslide {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }

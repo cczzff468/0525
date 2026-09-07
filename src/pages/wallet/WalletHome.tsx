@@ -7,9 +7,11 @@ import { formatMoney } from '../../utils/qr'
 export default function WalletHome({
   onBack,
   onOpen,
+  onOpenPassword,
 }: {
   onBack: () => void
   onOpen: (page: 'change' | 'fund' | 'paycode' | 'receivecode' | 'scan' | 'bills' | 'redpacket' | 'redpacketRecords' | 'transfer' | 'relatives' | 'bankcards') => void
+  onOpenPassword: () => void
 }) {
   const [tick, setTick] = useState(0)
   useEffect(() => {
@@ -93,6 +95,15 @@ export default function WalletHome({
             <BackIcon />
           </button>
         }
+        right={
+          <button className="nav-btn wallet-pwd-btn" onClick={onOpenPassword} aria-label="支付密码">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <rect x="5" y="10.5" width="14" height="9" rx="2.4" stroke="#576b95" strokeWidth="1.7" />
+              <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="#576b95" strokeWidth="1.7" />
+              <circle cx="12" cy="15" r="1.4" fill="#576b95" />
+            </svg>
+          </button>
+        }
       />
       <div className="page-body">
         <button className="wallet-balance-card" onClick={() => onOpen('change')}>
@@ -120,7 +131,7 @@ export default function WalletHome({
             <span className="wallet-pay-name">付款码</span>
           </button>
           <button className="wallet-pay-item" onClick={() => onOpen('receivecode')}>
-            <span className="wallet-pay-icon" style={{ background: 'linear-gradient(135deg,#ffb84d,#ff9500)' }}>
+            <span className="wallet-pay-icon" style={{ background: '#fa8c16' }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <rect x="4" y="4" width="6.5" height="6.5" rx="1.4" stroke="#fff" strokeWidth="1.7" />
                 <path d="M13.5 5h5.5v5.5M13.5 13.5h5.5V19" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />

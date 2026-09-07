@@ -57,6 +57,8 @@ export interface WalletState {
   lastYieldDate: string
   relativeCards: RelativeCard[]
   bankCards: BankCard[]
+  /** 6 位支付密码，未设置/关闭时不存 */
+  payPassword?: string
 }
 
 export type BillKind = '充值' | '提现' | '红包' | '转账' | '亲属卡' | '零钱通' | '收益' | '收付款'
