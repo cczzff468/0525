@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Friend, Message } from '../types'
-import { Avatar, NavBar, formatTime, Chevron } from '../components/common'
+import { Avatar, Modal, NavBar, formatTime, Chevron } from '../components/common'
 import { PlusIcon, SearchIcon } from '../components/icons'
+import { loadFriends, loadMessages, saveFriends, saveMessages } from '../store'
+
+interface MenuPos {
+  x: number
+  y: number
+  arrowX: number
+  arrowBottom: boolean
+}
 
 export function PlusSheet({
   visible,
@@ -77,15 +85,78 @@ export default function Messages({
   onOpenChat,
   onAddFriend,
   onOpenMoments,
+  onRefresh,
 }: {
   friends: Friend[]
   messages: Message[]
   onOpenChat: (friendId: string) => void
   onAddFriend: () => void
   onOpenMoments: () => void
+  onRefresh: () => void
 }) {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [menuFor, setMenuFor] = useState<Friend | null>(null)
+  const [menuPos, setMenuPos] = useState<MenuPos>({ x: 0, y: 0, arrowX: 0, arrowBottom: false })
+  const [confirm, setConfirm] = useState<{ kind: 'clear' | 'delete'; friend: Friend } | null>(null)
+  const [hint, setHint] = useState('')
+  const pressTimer = useRef<number>(0)
+  const hintTimer = useRef<number>(0)
+
+  useEffect(() => () => window.clearTimeout(pressTimer.current), [])
+
+  const showHint = (t: string) => {
+    setHint(t)
+    window.clearTimeout(hintTimer.current)
+    hintTimer.current = window.setTimeout(() => setHint(''), 1600)
+  }
+
+  const openRowMenu = (f: Friend, rect: DOMRect) => {
+    const menuW = 168
+    const menuH = 130
+    const up = rect.top > menuH + 24
+    const x = Math.min(Math.max(8, window.innerWidth - menuW - 10), window.innerWidth - menuW - 8)
+    setMenuPos({
+      x,
+      y: up ? rect.top - menuH - 10 : rect.bottom + 10,
+      arrowX: menuW - 26,
+      arrowBottom: up,
+    })
+    setMenuFor(f)
+  }
+
+  const onTouchStart = (f: Friend) => (e: React.TouchEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    window.clearTimeout(pressTimer.current)
+    pressTimer.current = window.setTimeout(() => openRowMenu(f, rect), 480)
+  }
+  const onTouchClear = () => window.clearTimeout(pressTimer.current)
+  const onContextMenu = (f: Friend) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    openRowMenu(f, (e.currentTarget as HTMLElement).getBoundingClientRect())
+  }
+
+  const togglePin = (f: Friend) => {
+    setMenuFor(null)
+    saveFriends(loadFriends().map((x) => (x.id === f.id ? { ...x, pinned: !x.pinned } : x)))
+    onRefresh()
+    showHint(f.pinned ? '已取消置顶' : '已置顶')
+  }
+
+  const clearChat = (f: Friend) => {
+    setConfirm(null)
+    saveMessages(loadMessages().filter((m) => m.friendId !== f.id))
+    onRefresh()
+    showHint('聊天记录已清空')
+  }
+
+  const deleteFriend = (f: Friend) => {
+    setConfirm(null)
+    saveFriends(loadFriends().filter((x) => x.id !== f.id))
+    saveMessages(loadMessages().filter((m) => m.friendId !== f.id))
+    onRefresh()
+    showHint('已删除联系人')
+  }
 
   const lastByFriend = new Map<string, Message>()
   for (const m of messages) {
@@ -96,7 +167,11 @@ export default function Messages({
   const rows = friends
     .map((f) => ({ friend: f, last: lastByFriend.get(f.id) }))
     .filter(({ friend }) => friend.name.toLowerCase().includes(query.trim().toLowerCase()))
-    .sort((a, b) => (b.last?.time ?? b.friend.createdAt) - (a.last?.time ?? a.friend.createdAt))
+    .sort(
+      (a, b) =>
+        (b.friend.pinned ? 1 : 0) - (a.friend.pinned ? 1 : 0) ||
+        (b.last?.time ?? b.friend.createdAt) - (a.last?.time ?? a.friend.createdAt)
+    )
 
   return (
     <div className="page">
@@ -128,7 +203,15 @@ export default function Messages({
         )}
         <div className="list-group">
           {rows.map(({ friend, last }) => (
-            <button key={friend.id} className="row" onClick={() => onOpenChat(friend.id)}>
+            <button
+              key={friend.id}
+              className="row"
+              onClick={() => onOpenChat(friend.id)}
+              onTouchStart={onTouchStart(friend)}
+              onTouchEnd={onTouchClear}
+              onTouchMove={onTouchClear}
+              onContextMenu={onContextMenu(friend)}
+            >
               <Avatar name={friend.name} src={friend.avatar} size={50} />
               <div className="row-main">
                 <div className="row-top">
@@ -144,6 +227,46 @@ export default function Messages({
           ))}
         </div>
       </div>
+
+      {hint && <div className="chat-toast">{hint}</div>}
+
+      {menuFor && (
+        <>
+          <div className="msg-menu-mask" onClick={() => setMenuFor(null)} />
+          <div className={`msg-menu vertical ${menuPos.arrowBottom ? 'arrow-bottom' : 'arrow-top'}`} style={{ left: menuPos.x, top: menuPos.y }}>
+            <span className="msg-menu-arrow" style={{ left: menuPos.arrowX }} />
+            <button className="msg-menu-item" onClick={() => togglePin(menuFor)}>
+              {menuFor.pinned ? '取消置顶' : '置顶'}
+            </button>
+            <button className="msg-menu-item" onClick={() => { setConfirm({ kind: 'clear', friend: menuFor }); setMenuFor(null) }}>
+              清空聊天
+            </button>
+            <button className="msg-menu-item danger" onClick={() => { setConfirm({ kind: 'delete', friend: menuFor }); setMenuFor(null) }}>
+              删除联系人
+            </button>
+          </div>
+        </>
+      )}
+
+      <Modal
+        open={confirm !== null}
+        title={confirm?.kind === 'delete' ? '删除联系人' : '清空聊天记录'}
+        buttons={[
+          { label: '取消', onClick: () => setConfirm(null) },
+          {
+            label: confirm?.kind === 'delete' ? '删除' : '清空',
+            primary: true,
+            onClick: () => {
+              if (confirm) (confirm.kind === 'delete' ? deleteFriend : clearChat)(confirm.friend)
+            },
+          },
+        ]}
+      >
+        {confirm?.kind === 'delete'
+          ? `将删除联系人「${confirm.friend.name}」及其全部聊天记录，无法恢复。`
+          : `将删除与「${confirm?.friend.name}」的全部聊天记录，无法恢复。`}
+      </Modal>
+
       <PlusSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} onAddFriend={onAddFriend} onOpenMoments={onOpenMoments} />
     </div>
   )

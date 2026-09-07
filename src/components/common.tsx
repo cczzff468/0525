@@ -82,6 +82,35 @@ export function Chevron() {
   )
 }
 
+export function Modal({
+  open,
+  title,
+  children,
+  buttons,
+}: {
+  open: boolean
+  title: string
+  children?: ReactNode
+  buttons: { label: string; onClick: () => void; primary?: boolean }[]
+}) {
+  if (!open) return null
+  return (
+    <div className="modal-mask" onClick={buttons[buttons.length - 1]?.onClick}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">{title}</div>
+        {children && <div className="modal-body">{children}</div>}
+        <div className="modal-buttons">
+          {buttons.map((b) => (
+            <button key={b.label} className={`modal-btn ${b.primary ? 'primary' : ''}`} onClick={b.onClick}>
+              {b.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function formatTime(ts: number): string {
   const d = new Date(ts)
   const now = new Date()

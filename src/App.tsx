@@ -11,6 +11,8 @@ import Moments from './pages/Moments'
 import MyProfile from './pages/MyProfile'
 import Settings from './pages/Settings'
 import ApiSettingPage from './pages/ApiSettingPage'
+import VisionApiPage from './pages/VisionApiPage'
+import VoiceApiPage from './pages/VoiceApiPage'
 import { ChatIcon, ContactsIcon, DiscoverIcon, MeIcon } from './components/icons'
 import { loadFriends, loadMessages, loadUiState, saveFriends, saveMessages, saveUiState } from './store'
 import type { Friend, Message } from './types'
@@ -26,6 +28,8 @@ type View =
   | { name: 'addPersona'; personaId?: string }
   | { name: 'settings' }
   | { name: 'apiSetting' }
+  | { name: 'visionApi' }
+  | { name: 'voiceApi' }
 
 const TABS: { key: Tab; label: string; icon: (active: boolean) => JSX.Element }[] = [
   { key: 'messages', label: '信息', icon: (a) => <ChatIcon active={a} /> },
@@ -42,7 +46,7 @@ function initialState(): { tab: Tab; view: View } {
   if (savedView && typeof savedView.name === 'string') {
     if (savedView.name === 'chat') {
       view = loadFriends().some((f) => f.id === savedView.friendId) ? savedView : { name: 'tabs' }
-    } else if (['moments', 'myProfile', 'settings', 'apiSetting'].includes(savedView.name)) {
+    } else if (['moments', 'myProfile', 'settings', 'apiSetting', 'visionApi', 'voiceApi'].includes(savedView.name)) {
       view = savedView
     }
   }
@@ -95,6 +99,7 @@ export default function App() {
         friend={friend}
         onBack={backToTabs}
         onEditFriend={() => setView({ name: 'addFriend', friendId: view.friendId })}
+        onOpenSettings={() => setView({ name: 'apiSetting' })}
       />
     ) : (
       <div className="page">
@@ -128,15 +133,26 @@ export default function App() {
   } else if (view.name === 'addPersona') {
     content = <AddPersona onBack={() => setView({ name: 'myProfile' })} personaId={view.personaId} />
   } else if (view.name === 'settings') {
-    content = <Settings onBack={backToTabs} onOpenApi={() => setView({ name: 'apiSetting' })} />
+    content = (
+      <Settings
+        onBack={backToTabs}
+        onOpenApi={() => setView({ name: 'apiSetting' })}
+        onOpenVision={() => setView({ name: 'visionApi' })}
+        onOpenVoice={() => setView({ name: 'voiceApi' })}
+      />
+    )
   } else if (view.name === 'apiSetting') {
     content = <ApiSettingPage onBack={() => setView({ name: 'settings' })} />
+  } else if (view.name === 'visionApi') {
+    content = <VisionApiPage onBack={() => setView({ name: 'settings' })} />
+  } else if (view.name === 'voiceApi') {
+    content = <VoiceApiPage onBack={() => setView({ name: 'settings' })} />
   } else {
     content = (
       <div className="tab-shell">
         <div className="tab-content" key={tab}>
           {tab === 'messages' && (
-            <Messages friends={friends} messages={messages} onOpenChat={openChat} onAddFriend={() => setView({ name: 'addFriend' })} onOpenMoments={() => setView({ name: 'moments' })} />
+            <Messages friends={friends} messages={messages} onOpenChat={openChat} onAddFriend={() => setView({ name: 'addFriend' })} onOpenMoments={() => setView({ name: 'moments' })} onRefresh={refreshData} />
           )}
           {tab === 'contacts' && (
             <Contacts

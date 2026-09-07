@@ -1,4 +1,4 @@
-import type { ApiSetting, Friend, Message, MomentsPost, Persona, Profile } from './types'
+import type { ApiSetting, Friend, Message, MomentsPost, Persona, Profile, VoiceConfig } from './types'
 
 const FRIENDS_KEY = 'im.friends'
 const MSGS_KEY = 'im.messages'
@@ -160,17 +160,76 @@ export function saveCover(cover: string) {
   write(COVER_KEY, cover)
 }
 
+export const DEFAULT_VOICE_CONFIGS: VoiceConfig[] = [
+  {
+    id: 'vc-minimax',
+    name: 'Minimax 语音',
+    enabled: true,
+    provider: 'Minimax 国内版',
+    baseUrl: 'https://api.minimax.chat/v1/t2a_v2',
+    apiKey: '',
+    model: 'speech-2.8-turbo',
+    voice: 'male-qn-qingse',
+    speed: 1,
+    pitch: 0,
+    speakLang: '',
+  },
+  {
+    id: 'vc-openai',
+    name: 'OpenAI TTS',
+    enabled: true,
+    provider: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1/audio/speech',
+    apiKey: '',
+    model: 'tts-1',
+    voice: 'nova',
+    speed: 1,
+    pitch: 0,
+    speakLang: '',
+  },
+  {
+    id: 'vc-edge',
+    name: 'Edge 免费语音',
+    enabled: false,
+    provider: '本地免费 (Edge TTS)',
+    baseUrl: '',
+    apiKey: '',
+    model: '',
+    voice: 'Xiaoxiao',
+    speed: 1,
+    pitch: 0,
+    speakLang: '',
+  },
+]
+
 export function loadApiSetting(): ApiSetting {
   const s = read<Partial<ApiSetting>>(API_KEY_STORE, {})
+  const v = (s.vision ?? {}) as Partial<ApiSetting['vision']>
+  const voice = (s.voice ?? {}) as Partial<ApiSetting['voice']>
   return {
     baseUrl: s.baseUrl || 'https://api.openai.com/v1/chat/completions',
     apiKey: s.apiKey || '',
     model: s.model || 'gpt-4o-mini',
     temperature: typeof s.temperature === 'number' ? s.temperature : 0.7,
     maxTokens: typeof s.maxTokens === 'number' ? s.maxTokens : 2048,
+    timeout: typeof s.timeout === 'number' && s.timeout > 0 ? s.timeout : 60,
     models: Array.isArray(s.models) ? s.models : [],
     presets: Array.isArray(s.presets) ? s.presets : [],
     myPreset: s.myPreset ?? null,
+    vision: {
+      enabled: v.enabled === true,
+      baseUrl: v.baseUrl || 'https://api.openai.com/v1/chat/completions',
+      apiKey: v.apiKey || '',
+      model: v.model || 'gpt-4o',
+      presets: Array.isArray(v.presets) ? v.presets : [],
+      activePresetId: v.activePresetId ?? '',
+    },
+    voice: {
+      sttEnabled: voice.sttEnabled === true,
+      sttLang: voice.sttLang || 'zh-CN',
+      configs: Array.isArray(voice.configs) && voice.configs.length > 0 ? voice.configs : DEFAULT_VOICE_CONFIGS,
+      selectedId: voice.selectedId || (voice as any).defaultId || 'vc-minimax',
+    },
   }
 }
 

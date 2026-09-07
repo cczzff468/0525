@@ -8,6 +8,7 @@ export interface Friend {
   wechatId: string
   region: string
   occupation: string
+  pinned?: boolean
   createdAt: number
 }
 
@@ -17,7 +18,6 @@ export interface Message {
   from: 'me' | 'friend'
   text: string
   time: number
-  edited?: boolean
   quote?: string
 }
 
@@ -67,13 +67,54 @@ export interface ApiPreset {
   apiKey?: string
 }
 
+export interface VisionPreset {
+  id: string
+  name: string
+  baseUrl: string
+  apiKey?: string
+  model: string
+}
+
+export interface VoiceConfig {
+  id: string
+  name: string
+  enabled: boolean
+  provider: string
+  baseUrl: string
+  apiKey: string
+  model: string
+  voice: string
+  speed: number
+  pitch: number
+  speakLang: string
+}
+
+export interface VisionSetting {
+  enabled: boolean
+  baseUrl: string
+  apiKey: string
+  model: string
+  presets: VisionPreset[]
+  activePresetId?: string
+}
+
+export interface VoiceSetting {
+  sttEnabled: boolean
+  sttLang: string
+  configs: VoiceConfig[]
+  selectedId: string
+}
+
 export interface ApiSetting {
   baseUrl: string
   apiKey: string
   model: string
   temperature: number
   maxTokens: number
+  timeout: number
   models: string[]
   presets: ApiPreset[]
   myPreset?: ApiPreset | null
+  vision: VisionSetting
+  voice: VoiceSetting
 }

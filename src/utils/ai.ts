@@ -1,6 +1,29 @@
 import { loadApiSetting } from '../store'
 import type { Friend, Profile } from '../types'
 
+export type AiErrorCode =
+  | 'noapi'
+  | 'offline'
+  | 'connect'
+  | 'timeout'
+  | '401'
+  | '403'
+  | '404'
+  | '429'
+  | 'model'
+  | 'toolong'
+  | 'other'
+
+export class AiError extends Error {
+  code: AiErrorCode
+  detail: string
+  constructor(code: AiErrorCode, detail = '') {
+    super(code)
+    this.code = code
+    this.detail = detail
+  }
+}
+
 export function chatUrl(url: string): string {
   const raw = url.trim()
   if (/\/chat\/completions(\?|$)/.test(raw)) return raw
@@ -38,14 +61,31 @@ export async function readServerError(res: Response): Promise<string> {
   return ''
 }
 
+function errorFromStatus(status: number, serverMsg: string): AiError {
+  const lower = serverMsg.toLowerCase()
+  if (status === 401) return new AiError('401', serverMsg)
+  if (status === 403) return new AiError('403', serverMsg)
+  if (status === 404) {
+    if (lower.includes('model')) return new AiError('model', serverMsg)
+    return new AiError('404', serverMsg)
+  }
+  if (status === 429) return new AiError('429', serverMsg)
+  if (lower.includes('model') && (lower.includes('not found') || lower.includes('does not exist') || lower.includes('不存在'))) {
+    return new AiError('model', serverMsg)
+  }
+  return new AiError('other', serverMsg ? `${status} ${serverMsg}` : `${status}`)
+}
+
 export async function aiStream(
   history: { role: 'user' | 'assistant'; content: string }[],
   friend: Friend,
   me: Profile,
   onDelta: (chunk: string) => void
-): Promise<string | null> {
+): Promise<{ text: string; truncated: boolean }> {
   const cfg = loadApiSetting()
-  if (!cfg.baseUrl.trim() || !cfg.model.trim()) return null
+  if (!cfg.baseUrl.trim() || !cfg.model.trim()) throw new AiError('noapi')
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new AiError('offline')
+
   const payload = {
     model: cfg.model.trim(),
     temperature: cfg.temperature,
@@ -59,6 +99,9 @@ export async function aiStream(
     'Content-Type': 'application/json',
     ...(cfg.apiKey.trim() ? { Authorization: `Bearer ${cfg.apiKey.trim()}` } : {}),
   }
+  const timeoutMs = Math.max(5, cfg.timeout) * 1000
+  const controller = new AbortController()
+  const abortTimer = window.setTimeout(() => controller.abort(), timeoutMs)
 
   let full = ''
   try {
@@ -66,59 +109,54 @@ export async function aiStream(
       method: 'POST',
       headers,
       body: JSON.stringify({ ...payload, stream: true }),
+      signal: controller.signal,
     })
-    if (res.ok && res.body) {
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-      let done = false
-      while (!done) {
-        const { value, done: rdDone } = await reader.read()
-        if (rdDone) break
-        buf += decoder.decode(value, { stream: true })
-        const events = buf.split('\n\n')
-        buf = events.pop() ?? ''
-        for (const ev of events) {
-          for (const line of ev.split('\n')) {
-            const t = line.trim()
-            if (!t.startsWith('data:')) continue
-            const data = t.slice(5).trim()
-            if (data === '[DONE]') {
-              done = true
-              break
+    if (!res.ok) throw errorFromStatus(res.status, await readServerError(res))
+    if (!res.body) throw new AiError('other', '服务端未返回数据流')
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    let finished = false
+    let done = false
+    while (!done) {
+      const { value, done: rdDone } = await reader.read()
+      if (rdDone) break
+      buf += decoder.decode(value, { stream: true })
+      const events = buf.split('\n\n')
+      buf = events.pop() ?? ''
+      for (const ev of events) {
+        for (const line of ev.split('\n')) {
+          const t = line.trim()
+          if (!t.startsWith('data:')) continue
+          const data = t.slice(5).trim()
+          if (data === '[DONE]') {
+            done = true
+            break
+          }
+          try {
+            const parsed = JSON.parse(data)
+            const choice = parsed?.choices?.[0]
+            const delta = choice?.delta?.content
+            if (typeof delta === 'string' && delta) {
+              full += delta
+              onDelta(delta)
             }
-            try {
-              const delta = JSON.parse(data)?.choices?.[0]?.delta?.content
-              if (typeof delta === 'string' && delta) {
-                full += delta
-                onDelta(delta)
-              }
-            } catch {
-              /* partial json, ignore */
-            }
+            if (choice?.finish_reason === 'length') finished = true
+          } catch {
+            /* partial json, ignore */
           }
         }
       }
-      if (full.trim()) return full.trim().slice(0, 2000)
     }
-  } catch {
-    /* fall through to non-stream */
-  }
-
-  try {
-    const res = await fetch(chatUrl(cfg.baseUrl), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    const content = data?.choices?.[0]?.message?.content
-    if (typeof content !== 'string' || !content.trim()) return null
-    const text = content.trim().slice(0, 2000)
-    onDelta(text)
-    return text
-  } catch {
-    return null
+    if (!full.trim()) throw new AiError('other', '模型没有返回内容')
+    return { text: full.trim().slice(0, 4000), truncated: finished }
+  } catch (err) {
+    if (err instanceof AiError) throw err
+    if (err instanceof DOMException && err.name === 'AbortError') throw new AiError('timeout')
+    if (err instanceof TypeError) throw new AiError('connect')
+    throw new AiError('other', err instanceof Error ? err.message : String(err))
+  } finally {
+    window.clearTimeout(abortTimer)
   }
 }

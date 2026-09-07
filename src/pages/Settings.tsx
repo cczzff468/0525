@@ -5,11 +5,22 @@ import { loadApiSetting } from '../store'
 export default function Settings({
   onBack,
   onOpenApi,
+  onOpenVision,
+  onOpenVoice,
 }: {
   onBack: () => void
   onOpenApi: () => void
+  onOpenVision: () => void
+  onOpenVoice: () => void
 }) {
   const cfg = loadApiSetting()
+  const selectedVoice = cfg.voice.configs.find((c) => c.id === cfg.voice.selectedId) ?? cfg.voice.configs.find((c) => c.enabled)
+  const voiceSubtitle = [
+    cfg.voice.sttEnabled ? '语音输入已开启' : '',
+    selectedVoice && selectedVoice.enabled ? `播报：${selectedVoice.name}` : '',
+  ]
+    .filter(Boolean)
+    .join('，') || '语音输入与播报均未开启'
   return (
     <div className="page">
       <NavBar
@@ -35,6 +46,33 @@ export default function Settings({
             <div className="row-main">
               <span className="row-title">API设置</span>
               <span className="row-preview">{cfg.apiKey ? `模型：${cfg.model}` : '未配置 Key，聊天将使用本地模拟回复'}</span>
+            </div>
+            <Chevron />
+          </button>
+          <button className="row" onClick={onOpenVision}>
+            <div className="row-icon" style={{ background: '#5856d6' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <rect x="3.5" y="6" width="17" height="12" rx="3" stroke="#fff" strokeWidth="1.8" />
+                <circle cx="12" cy="12" r="3" stroke="#fff" strokeWidth="1.8" />
+                <circle cx="17.4" cy="9" r="1" fill="#fff" />
+              </svg>
+            </div>
+            <div className="row-main">
+              <span className="row-title">识图模型</span>
+              <span className="row-preview">{cfg.vision.enabled ? `已启用 · ${cfg.vision.model}` : '未启用，发图片不让 AI 识别'}</span>
+            </div>
+            <Chevron />
+          </button>
+          <button className="row" onClick={onOpenVoice}>
+            <div className="row-icon" style={{ background: '#ff9500' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <rect x="9" y="3.5" width="6" height="11" rx="3" stroke="#fff" strokeWidth="1.8" />
+                <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div className="row-main">
+              <span className="row-title">语音配置</span>
+              <span className="row-preview">{voiceSubtitle}</span>
             </div>
             <Chevron />
           </button>

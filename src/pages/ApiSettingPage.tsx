@@ -355,6 +355,19 @@ export default function ApiSettingPage({ onBack }: { onBack: () => void }) {
               onChange={(e) => update({ maxTokens: Math.min(128000, Math.max(1, Number(e.target.value.replace(/\D/g, '')) || 1)) })}
             />
           </div>
+          <div className="form-row">
+            <label className="form-label" htmlFor="api-timeout">超时时间(秒)</label>
+            <input
+              id="api-timeout"
+              className="form-input form-input-age"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={3}
+              value={cfg.timeout}
+              onChange={(e) => update({ timeout: Math.min(300, Math.max(5, Number(e.target.value.replace(/\D/g, '')) || 5)) })}
+            />
+          </div>
         </div>
 
         <button className="primary-btn" onClick={testConnection} disabled={testing}>
