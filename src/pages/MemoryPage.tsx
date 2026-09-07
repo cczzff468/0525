@@ -41,9 +41,14 @@ function FriendPicker({ onBack, onPick }: { onBack: () => void; onPick: (id: str
                 <div className="row-main">
                   <span className="row-title">{f.name}</span>
                   <span className="row-preview">
-                    {fc > 0 || lc > 0 ? `${fc} 个记忆碎片 · ${lc} 份长期记忆` : '还没有记忆，聊过天后来这里看看'}
+                    {fc > 0 || lc > 0 ? `${fc} 个碎片 · ${lc} 份长期记忆` : '还没有记忆，聊过天后来这里看看'}
                   </span>
                 </div>
+                {fc > 0 || lc > 0 ? (
+                  <div style={{ fontSize: 11, color: '#0a84ff', fontWeight: 600 }}>
+                    {fc + lc}
+                  </div>
+                ) : null}
               </button>
             )
           })}
@@ -178,6 +183,22 @@ export default function MemoryPage({
             <div className="memory-friend-sub">
               {frags.length} 个碎片 · {lts.length} 份长期记忆 · 未总结 {pendingCount} 条消息
             </div>
+          </div>
+        </div>
+
+        {/* 统计概览 */}
+        <div className="memory-stats">
+          <div className="memory-stat-card">
+            <div className="memory-stat-num">{frags.length}</div>
+            <div className="memory-stat-label">记忆碎片</div>
+          </div>
+          <div className="memory-stat-card">
+            <div className="memory-stat-num">{lts.length}</div>
+            <div className="memory-stat-label">长期记忆</div>
+          </div>
+          <div className="memory-stat-card">
+            <div className="memory-stat-num">{pendingCount}</div>
+            <div className="memory-stat-label">待总结</div>
           </div>
         </div>
 

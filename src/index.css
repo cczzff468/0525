@@ -3006,6 +3006,35 @@ button:disabled {
   margin-top: 2px;
 }
 
+/* 统计概览 */
+.memory-stats {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.memory-stat-card {
+  flex: 1;
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  border: 1px solid rgba(0, 136, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px 12px;
+  text-align: center;
+}
+
+.memory-stat-num {
+  font-size: 26px;
+  font-weight: 700;
+  color: #0a84ff;
+  line-height: 1.2;
+}
+
+.memory-stat-label {
+  font-size: 12px;
+  color: #9a9aa0;
+  margin-top: 4px;
+}
+
 .memory-tabs {
   display: flex;
   background: #e9e9eb;
@@ -3042,16 +3071,30 @@ button:disabled {
 
 .memory-card {
   background: #fff;
-  border-radius: 14px;
-  padding: 13px 15px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  border-radius: 16px;
+  padding: 15px 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(10, 132, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.memory-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #0a84ff, #30d158, #bf5af2);
+  opacity: 0.8;
 }
 
 .memory-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .memory-card-time {
@@ -3061,17 +3104,18 @@ button:disabled {
 
 .memory-badge {
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 9px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 500;
 }
 
 .memory-badge.auto {
-  background: #e8f3ff;
+  background: linear-gradient(135deg, #e8f3ff, #d4e8ff);
   color: #0a84ff;
 }
 
 .memory-badge.manual {
-  background: #e9f9ee;
+  background: linear-gradient(135deg, #e9f9ee, #d4f4dc);
   color: #34c759;
 }
 
@@ -3080,15 +3124,17 @@ button:disabled {
 }
 
 .memory-line {
-  margin: 0 0 4px;
+  margin: 0 0 5px;
   font-size: 14px;
-  color: #333;
-  line-height: 1.55;
+  color: #1c1c1e;
+  line-height: 1.6;
   word-break: break-word;
 }
 
 .memory-card-foot {
-  margin-top: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.06);
   font-size: 11px;
   color: #c0c0c4;
 }
@@ -3106,7 +3152,33 @@ button:disabled {
 .memory-settings {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
+}
+
+.memory-settings .section-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111;
+  margin-top: 4px;
+}
+
+.memory-settings .form-row {
+  margin-top: 2px;
+}
+
+/* 好友选择列表美化 */
+.memory-page .list-group {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.memory-page .row {
+  transition: background 0.2s;
+}
+
+.memory-page .row:hover {
+  background: rgba(0, 136, 255, 0.04);
+}
 }
 
 .memory-seg {
