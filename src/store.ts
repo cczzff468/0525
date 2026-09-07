@@ -1,4 +1,4 @@
-import type { ApiSetting, ChatBg, Friend, LocationItem, MemoryData, MemorySetting, Message, MomentsPost, Persona, Profile, Sticker, VoiceConfig } from './types'
+import type { ApiSetting, Bill, ChatBg, Friend, LocationItem, MemoryData, MemorySetting, Message, MomentsPost, Persona, Profile, Sticker, VoiceConfig, WalletState } from './types'
 
 const FRIENDS_KEY = 'im.friends'
 const MSGS_KEY = 'im.messages'
@@ -13,8 +13,10 @@ const MEMORY_KEY = 'im.memory'
 const CHATBG_KEY = 'im.chatbg'
 const STICKERS_KEY = 'im.stickers'
 const LOCATIONS_KEY = 'im.locations'
+const WALLET_KEY = 'im.wallet'
+const BILLS_KEY = 'im.bills'
 
-const ALL_KEYS = [FRIENDS_KEY, MSGS_KEY, PROFILE_KEY, MOMENTS_KEY, COVER_KEY, UI_KEY, API_KEY_STORE, PERSONAS_KEY, ACTIVE_PERSONA_KEY, MEMORY_KEY, CHATBG_KEY, STICKERS_KEY, LOCATIONS_KEY]
+const ALL_KEYS = [FRIENDS_KEY, MSGS_KEY, PROFILE_KEY, MOMENTS_KEY, COVER_KEY, UI_KEY, API_KEY_STORE, PERSONAS_KEY, ACTIVE_PERSONA_KEY, MEMORY_KEY, CHATBG_KEY, STICKERS_KEY, LOCATIONS_KEY, WALLET_KEY, BILLS_KEY]
 const DB_NAME = 'ios-im'
 const STORE_NAME = 'kv'
 
@@ -127,6 +129,28 @@ export function loadMessages(): Message[] {
 
 export function saveMessages(messages: Message[]) {
   write(MSGS_KEY, messages)
+}
+
+export function appendMessage(msg: Message) {
+  const all = read<Message[]>(MSGS_KEY, [])
+  all.push(msg)
+  write(MSGS_KEY, all)
+  const friends = read<Friend[]>(FRIENDS_KEY, [])
+  const f = friends.find((x) => x.id === msg.friendId)
+  if (f) {
+    f.lastMessage = msg.redpacket ? '[微信红包]' : msg.transfer ? '[转账]' : msg.relativeCard ? '[亲属卡]' : msg.receipt ? '[凭证]' : msg.sticker ? '[表情]' : msg.location ? '[位置]' : msg.text
+    f.lastTime = msg.time
+    write(FRIENDS_KEY, friends)
+  }
+}
+
+export function patchFriendMsg(friendId: string, msgId: string, patch: Partial<Message>): Message | null {
+  const all = read<Message[]>(MSGS_KEY, [])
+  const msg = all.find((m) => m.id === msgId && m.friendId === friendId)
+  if (!msg) return null
+  Object.assign(msg, patch)
+  write(MSGS_KEY, all)
+  return msg
 }
 
 export function saveProfile(profile: Profile) {
@@ -297,13 +321,82 @@ export function saveStickers(list: Sticker[]) {
 }
 
 export function loadLocations(): LocationItem[] {
-  return read<LocationItem[]>(LOCATIONS_KEY, [])
+  return read(LOCATIONS_KEY, [])
 }
 
 export function saveLocations(list: LocationItem[]) {
   write(LOCATIONS_KEY, list)
 }
 
+const DEFAULT_WALLET: WalletState = {
+  balance: 666.66,
+  changeFund: 1288.0,
+  fundYield: 36.42,
+  lastYieldDate: '',
+  relativeCards: [],
+  bankCards: [
+    {
+      id: 'card-seed-cmb',
+      bankName: '招商银行',
+      cardTail: '1234',
+      holder: '',
+      phone: '',
+      cardType: '储蓄卡',
+      available: 50000,
+      createdAt: Date.now(),
+    },
+  ],
+}
+
+export function loadWallet(): WalletState {
+  const raw = read<Partial<WalletState>>(WALLET_KEY, {})
+  const bankCards = (Array.isArray(raw.bankCards) ? raw.bankCards : []).map((c) => ({ ...c, available: typeof c.available === 'number' ? c.available : 0 }))
+  return { ...DEFAULT_WALLET, ...raw, bankCards }
+}
+
+export function saveWallet(w: WalletState) {
+  write(WALLET_KEY, w)
+}
+
+export function updateWallet(fn: (w: WalletState) => WalletState): WalletState {
+  const next = fn(loadWallet())
+  saveWallet(next)
+  return next
+}
+
+export function loadBills(): Bill[] {
+  return read(BILLS_KEY, [])
+}
+
+export function saveBills(list: Bill[]) {
+  write(BILLS_KEY, list)
+}
+
+export function addBill(b: Omit<Bill, 'id' | 'time'> & { time?: number }): Bill {
+  const bill: Bill = { ...b, id: uid(), time: b.time ?? Date.now() }
+  saveBills([bill, ...loadBills()])
+  return bill
+}
+
+const FUND_RATE = 0.01986
+
+export function settleDailyYield(): boolean {
+  const w = loadWallet()
+  const today = new Date().toDateString()
+  if (w.lastYieldDate === today || w.changeFund < 1) return false
+  const yieldAmt = Math.round(((w.changeFund * FUND_RATE) / 365) * 100) / 100
+  updateWallet((x) => ({
+    ...x,
+    changeFund: Math.round((x.changeFund + yieldAmt) * 100) / 100,
+    fundYield: Math.round((x.fundYield + yieldAmt) * 100) / 100,
+    lastYieldDate: today,
+  }))
+  if (yieldAmt >= 0.01) {
+    addBill({ kind: '收益', title: '零钱通收益', amount: yieldAmt, status: '已到账', note: '七日年化收益率 1.9860%' })
+    return true
+  }
+  return false
+}
 
 function personaToProfile(p: Persona): Profile {
   return { name: p.name, avatar: p.avatar, gender: p.gender, age: p.age, bio: p.bio, wechatId: p.wechatId, region: p.region }

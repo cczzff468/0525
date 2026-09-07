@@ -16,12 +16,14 @@ export default function Me({
   onOpenMoments,
   onOpenMemory,
   onOpenStickers,
+  onOpenWallet,
 }: {
   onOpenProfile: () => void
   onOpenSettings: () => void
   onOpenMoments: () => void
   onOpenMemory: () => void
   onOpenStickers: () => void
+  onOpenWallet: () => void
 }) {
   const profile = loadProfile()
   const avatar = profile.avatar || 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="120" height="120" fill="#c7c7cc"/><text x="60" y="64" font-size="54" fill="#fff" text-anchor="middle" dominant-baseline="central" font-family="sans-serif">我</text></svg>')
@@ -53,7 +55,8 @@ export default function Me({
               key={r.label}
               className="row"
               onClick={() => {
-                if (r.label === '朋友圈') onOpenMoments()
+                if (r.label === '服务') onOpenWallet()
+                else if (r.label === '朋友圈') onOpenMoments()
                 else if (r.label === '记忆匣子') onOpenMemory()
                 else if (r.label === '表情') onOpenStickers()
               }}

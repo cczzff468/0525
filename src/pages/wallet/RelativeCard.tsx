@@ -1,0 +1,278 @@
+import { useState } from 'react'
+import { NavBar, Avatar, Modal } from '../../components/common'
+import { BackIcon } from '../../components/icons'
+import { addBill, loadFriends, loadWallet, updateWallet, uid } from '../../store'
+import type { RelativeCard } from '../../types'
+import { formatMoney } from '../../utils/qr'
+
+const fmtFull = (t: number) => {
+  const d = new Date(t)
+  const p = (n: number) => n.toString().padStart(2, '0')
+  return `${d.getFullYear()}年${p(d.getMonth() + 1)}月${p(d.getDate())}日 ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+export default function RelativeCardPage({ onBack, onGift }: { onBack: () => void; onGift: (card: RelativeCard) => void }) {
+  const [tick, setTick] = useState(0)
+  const [gift, setGift] = useState(false)
+  const [spendCard, setSpendCard] = useState<RelativeCard | null>(null)
+  const [detailCard, setDetailCard] = useState<RelativeCard | null>(null)
+  const [amount, setAmount] = useState('')
+  const [limit, setLimit] = useState('200')
+  const [note, setNote] = useState('')
+  const [err, setErr] = useState('')
+  const [hint, setHint] = useState('')
+  const [pickFriend, setPickFriend] = useState(false)
+  const [target, setTarget] = useState<{ id: string; name: string; avatar?: string } | null>(null)
+  const w = (() => {
+    void tick
+    return loadWallet()
+  })()
+
+  const flash = (t: string) => {
+    setHint(t)
+    window.setTimeout(() => setHint(''), 1600)
+  }
+
+  const createCard = () => {
+    const n = Math.round(Number(limit) * 100) / 100
+    if (!target) {
+      setErr('请选择赠送对象')
+      return
+    }
+    if (!n || n <= 0 || n > 3000) {
+      setErr('每月消费上限需在 0.01 - 3000 元之间')
+      return
+    }
+    const card: RelativeCard = { id: uid(), friendId: target.id, friendName: target.name, monthlyLimit: n, used: 0, direction: 'given', status: 'pending', createdAt: Date.now() }
+    updateWallet((x) => ({ ...x, relativeCards: [...x.relativeCards, card] }))
+    addBill({ kind: '亲属卡', title: `赠送亲属卡 · ${target.name}`, amount: 0, status: '已赠送', note: `每月消费上限 ¥${formatMoney(n)}` })
+    setGift(false)
+    setTarget(null)
+    setLimit('200')
+    setErr('')
+    setTick((t) => t + 1)
+    flash('亲属卡已赠送，对方领取后即可使用')
+    onGift(card)
+  }
+
+  const spend = () => {
+    if (!spendCard) return
+    const n = Math.round(Number(amount) * 100) / 100
+    if (!n || n <= 0) {
+      setErr('请输入正确的金额')
+      return
+    }
+    if (n > spendCard.monthlyLimit - spendCard.used) {
+      setErr('超过本卡当月剩余额度')
+      return
+    }
+    if (n > w.balance) {
+      setErr('零钱余额不足')
+      return
+    }
+    updateWallet((x) => ({
+      ...x,
+      balance: Math.round((x.balance - n) * 100) / 100,
+      relativeCards: x.relativeCards.map((c) => (c.id === spendCard.id ? { ...c, used: Math.round((c.used + n) * 100) / 100 } : c)),
+    }))
+    addBill({ kind: '亲属卡', title: `${spendCard.friendName} 的亲属卡消费`, amount: -n, status: '已从零钱扣除', friendName: spendCard.friendName, note: note.trim() || '亲属卡消费' })
+    setSpendCard(null)
+    setAmount('')
+    setNote('')
+    setErr('')
+    setTick((t) => t + 1)
+    flash(`已从零钱扣除 ¥${formatMoney(n)}`)
+  }
+
+  const unbind = (card: RelativeCard) => {
+    updateWallet((x) => ({ ...x, relativeCards: x.relativeCards.filter((c) => c.id !== card.id) }))
+    setTick((t) => t + 1)
+    flash(`已解绑 ${card.friendName} 的亲属卡`)
+  }
+
+  return (
+    <div className="page relative-page">
+      <NavBar
+        title="亲属卡"
+        left={
+          <button className="nav-btn" onClick={onBack} aria-label="返回">
+            <BackIcon />
+          </button>
+        }
+      />
+      <div className="page-body">
+        <div className="relative-intro">
+          为爸妈、子女等亲人赠送亲属卡，对方消费时从你的零钱代付，每月上限由你设定。
+        </div>
+        {w.relativeCards.length === 0 && (
+          <div className="relative-empty">
+            <span className="relative-empty-icon">亲</span>
+            <span>还没有赠送过亲属卡</span>
+          </div>
+        )}
+        {w.relativeCards.map((c) => {
+          const rest = Math.round((c.monthlyLimit - c.used) * 100) / 100
+          const pct = Math.min(100, Math.round((c.used / c.monthlyLimit) * 100))
+          return (
+            <div key={c.id} className="relative-card" onClick={() => setDetailCard(c)}>
+              <div className="relative-card-top">
+                <Avatar name={c.friendName} size={38} />
+                <div className="relative-card-info">
+                  <span className="relative-card-name">{c.friendName}的亲属卡</span>
+                  <span className="relative-card-limit">每月上限 ¥{formatMoney(c.monthlyLimit)}</span>
+                </div>
+                {c.status === 'claimed' && <span className="relative-card-state">已领取</span>}
+                <button className="relative-card-unbind" onClick={(e) => { e.stopPropagation(); unbind(c) }}>
+                  解绑
+                </button>
+              </div>
+              <div className="relative-card-bar">
+                <span className="relative-card-bar-fill" style={{ width: `${pct}%` }} />
+              </div>
+              <div className="relative-card-bottom">
+                <span className="relative-card-rest">本月剩余 ¥{formatMoney(Math.max(rest, 0))}</span>
+                <button
+                  className="relative-card-spend"
+                  onClick={() => {
+                    setSpendCard(c)
+                    setAmount('')
+                    setNote('')
+                    setErr('')
+                  }}
+                >
+                  记一笔消费
+                </button>
+              </div>
+            </div>
+          )
+        })}
+        <button className="btn-green-big relative-gift-btn" onClick={() => setGift(true)}>
+          赠送亲属卡
+        </button>
+      </div>
+
+      <Modal
+        open={gift}
+        title="赠送亲属卡"
+        buttons={[
+          { label: '取消', onClick: () => setGift(false) },
+          { label: '赠送', primary: true, onClick: createCard },
+        ]}
+      >
+        <button className="row relative-pick" onClick={() => setPickFriend(true)}>
+          {target ? (
+            <>
+              <Avatar name={target.name} src={target.avatar} size={32} />
+              <div className="row-main">
+                <span className="row-title">{target.name}</span>
+              </div>
+            </>
+          ) : (
+            <div className="row-main">
+              <span className="row-title" style={{ color: '#8e8e93' }}>
+                选择赠送对象
+              </span>
+            </div>
+          )}
+          <span className="arrow-right" />
+        </button>
+        <div className="wallet-money-input">
+          <span>¥</span>
+          <input type="number" inputMode="decimal" placeholder="每月消费上限" value={limit} onChange={(e) => { setLimit(e.target.value); setErr('') }} />
+        </div>
+        {err && <div className="wallet-money-err">{err}</div>}
+        <div className="wallet-money-tip">上限范围 0.01 - 3000 元，每月 1 日自动重置额度</div>
+      </Modal>
+
+      <Modal open={pickFriend} title="选择对象" buttons={[{ label: '取消', onClick: () => setPickFriend(false) }]}>
+        <div className="transfer-pick-list">
+          {loadFriends().map((f) => (
+            <button
+              key={f.id}
+              className="row"
+              onClick={() => {
+                setTarget({ id: f.id, name: f.name, avatar: f.avatar })
+                setPickFriend(false)
+              }}
+            >
+              <Avatar name={f.name} src={f.avatar} size={34} />
+              <div className="row-main">
+                <span className="row-title">{f.name}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </Modal>
+
+      <Modal
+        open={spendCard !== null}
+        title={spendCard ? `${spendCard.friendName} 的亲属卡消费` : '记一笔'}
+        buttons={[
+          { label: '取消', onClick: () => setSpendCard(null) },
+          { label: '确认', primary: true, onClick: spend },
+        ]}
+      >
+        {spendCard && <div className="wallet-money-tip">本月剩余额度 ¥{formatMoney(Math.max(spendCard.monthlyLimit - spendCard.used, 0))}</div>}
+        <div className="wallet-money-input">
+          <span>¥</span>
+          <input type="number" inputMode="decimal" placeholder="消费金额" value={amount} autoFocus onChange={(e) => { setAmount(e.target.value); setErr('') }} />
+        </div>
+        <div className="wallet-money-input">
+          <span style={{ fontSize: 13 }}>用途</span>
+          <input placeholder="选填，如：早午餐" value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+        {err && <div className="wallet-money-err">{err}</div>}
+      </Modal>
+
+      {hint && <div className="chat-toast">{hint}</div>}
+
+      {detailCard && (
+        <div className="wd-page relative-detail-overlay" onClick={() => setDetailCard(null)}>
+          <div className="wd-detail-content" onClick={(e) => e.stopPropagation()}>
+            <NavBar title="亲属卡详情" left={<button className="nav-btn" onClick={() => setDetailCard(null)} aria-label="返回"><BackIcon /></button>} />
+            <div className="page-body wd-body">
+              <div className="wd-rc-badge">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                </svg>
+              </div>
+              <div className="wd-rc-subject">给 {detailCard.friendName} 的亲属卡</div>
+              <div className="wd-rc-amount">
+                <span className="wd-rc-amount-label">每月可用额度</span>
+                <span className="wd-rc-amount-value">¥{formatMoney(detailCard.monthlyLimit)}</span>
+              </div>
+              <div className="wd-divider" />
+              <div className="wd-rc-bar-wrap">
+                <div className="wd-rc-bar">
+                  <span className="wd-rc-bar-fill" style={{ width: `${Math.min(100, Math.round((detailCard.used / detailCard.monthlyLimit) * 100))}%` }} />
+                </div>
+                <span className="wd-rc-remaining">本月剩余 ¥{formatMoney(Math.max(Math.round((detailCard.monthlyLimit - detailCard.used) * 100) / 100, 0))}</span>
+              </div>
+              <div className="wd-divider" />
+              <div className="wd-info-rows">
+                <div className="wd-info-row">
+                  <span className="wd-info-label">当前状态</span>
+                  <span className={`wd-info-value ${detailCard.status === 'claimed' ? '' : 'wd-info-warn'}`}>{detailCard.status === 'claimed' ? '对方已领取' : '待对方领取'}</span>
+                </div>
+                <div className="wd-info-row">
+                  <span className="wd-info-label">扣款方式</span>
+                  <span className="wd-info-value">零钱</span>
+                </div>
+                <div className="wd-info-row">
+                  <span className="wd-info-label">创建时间</span>
+                  <span className="wd-info-value">{fmtFull(detailCard.createdAt)}</span>
+                </div>
+                {detailCard.status === 'claimed' && detailCard.claimedAt && (
+                  <div className="wd-info-row">
+                    <span className="wd-info-label">领取时间</span>
+                    <span className="wd-info-value">{fmtFull(detailCard.claimedAt)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

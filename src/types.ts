@@ -23,6 +23,68 @@ export interface Friend {
   queuedSend?: boolean
   prompt?: string
   createdAt: number
+  lastMessage?: string
+  lastTime?: number
+}
+
+export interface RelativeCard {
+  id: string
+  friendId: string
+  friendName: string
+  monthlyLimit: number
+  used: number
+  direction: 'given' | 'received'
+  status?: 'pending' | 'claimed'
+  claimedAt?: number
+  createdAt: number
+}
+
+export interface BankCard {
+  id: string
+  bankName: string
+  cardTail: string
+  holder: string
+  phone: string
+  cardType: string
+  available: number
+  createdAt: number
+}
+
+export interface WalletState {
+  balance: number
+  changeFund: number
+  fundYield: number
+  lastYieldDate: string
+  relativeCards: RelativeCard[]
+  bankCards: BankCard[]
+}
+
+export type BillKind = '充值' | '提现' | '红包' | '转账' | '亲属卡' | '零钱通' | '收益' | '收付款'
+
+export interface Bill {
+  id: string
+  kind: BillKind
+  title: string
+  amount: number
+  time: number
+  status: string
+  friendName?: string
+  note?: string
+}
+
+export interface RedPacketInfo {
+  amount: number
+  blessing: string
+  status: '待领取' | '已领取'
+  openedBy?: string
+  openedAt?: number
+}
+
+export interface TransferInfo {
+  amount: number
+  note: string
+  status: '待收款' | '已收款' | '已退还'
+  confirmedAt?: number
 }
 
 export interface Sticker {
@@ -46,6 +108,10 @@ export interface Message {
   quote?: string
   sticker?: { meaning: string; url?: string; emoji?: string }
   location?: { name: string; address?: string }
+  redpacket?: RedPacketInfo
+  transfer?: TransferInfo
+  relativeCard?: { cardId: string; status: '待领取' | '已领取' }
+  receipt?: { kind: 'redpacket' | 'transfer' | 'rc'; amount: number; srcMsgId: string; cardId?: string }
 }
 
 export interface LocationItem {
