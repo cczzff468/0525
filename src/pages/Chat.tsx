@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Friend, Message, Profile } from '../types'
-import { Avatar, formatTime, formatTimeFull } from '../components/common'
+import { ActionSheet, Avatar, formatTime, formatTimeFull } from '../components/common'
 import { BackIcon, SendIcon, VideoIcon, PlusBadgeIcon, MicIcon } from '../components/icons'
 import { loadMessages, loadProfile, saveMessages, uid } from '../store'
-import { aiReply } from '../utils/ai'
+import { aiStream } from '../utils/ai'
 
 const REPLIES = ['嗯嗯，我在呢。', '好呀，就这么定了。', '哈哈，你这么说我也觉得。', '真的吗？太好了！', '行，回头细聊。', '嗯，有道理。', '哈哈哈，懂的都懂。', '好嘞，安排上。']
 
@@ -40,6 +40,29 @@ function makeReply(text: string, friend: Friend, me: Profile): string {
   return wrap(pick(REPLIES))
 }
 
+function copyText(text: string, onFail: () => void) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(onFail)
+    return
+  }
+  onFail()
+}
+
+function copyFallback(text: string) {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  try {
+    document.execCommand('copy')
+  } catch {
+    /* ignore */
+  }
+  document.body.removeChild(ta)
+}
+
 export default function Chat({
   friend,
   onBack,
@@ -53,41 +76,210 @@ export default function Chat({
     loadMessages().filter((m) => m.friendId === friend.id).sort((a, b) => a.time - b.time)
   )
   const [draft, setDraft] = useState('')
+  const [typing, setTyping] = useState(false)
+  const [streaming, setStreaming] = useState<string | null>(null)
+  const [menuFor, setMenuFor] = useState<Message | null>(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [replyQuote, setReplyQuote] = useState<Message | null>(null)
+  const [editMsg, setEditMsg] = useState<Message | null>(null)
+  const [hint, setHint] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<number>(0)
+  const intervalRef = useRef<number>(0)
+  const pressRef = useRef<number>(0)
+  const busyRef = useRef(false)
+  const msgsRef = useRef(messages)
+  const hintTimer = useRef<number>(0)
+
+  useEffect(() => {
+    msgsRef.current = messages
+  }, [messages])
 
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [messages])
+  }, [messages, streaming, typing])
 
-  useEffect(() => () => window.clearTimeout(timerRef.current), [])
+  useEffect(
+    () => () => {
+      window.clearTimeout(timerRef.current)
+      window.clearInterval(intervalRef.current)
+      window.clearTimeout(pressRef.current)
+    },
+    []
+  )
 
-  const append = (msg: Message) => {
-    setMessages((prev) => [...prev, msg])
-    const all = loadMessages()
-    all.push(msg)
-    saveMessages(all)
+  const commit = (next: Message[]) => {
+    setMessages(next)
+    saveMessages(loadMessages().filter((m) => m.friendId !== friend.id).concat(next))
+  }
+
+  const showHint = (t: string) => {
+    setHint(t)
+    window.clearTimeout(hintTimer.current)
+    hintTimer.current = window.setTimeout(() => setHint(''), 1600)
+  }
+
+  const doCopy = (text: string) => {
+    copyText(text, () => copyFallback(text))
+    showHint('已复制')
+  }
+
+  const typewriter = (text: string) => {
+    setTyping(false)
+    let i = 0
+    intervalRef.current = window.setInterval(() => {
+      i += 1 + Math.floor(Math.random() * 2)
+      setStreaming(text.slice(0, i))
+      if (i >= text.length) {
+        window.clearInterval(intervalRef.current)
+        setStreaming(null)
+        commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'friend', text, time: Date.now() }])
+        busyRef.current = false
+      }
+    }, 40)
+  }
+
+  const respond = (base: Message[]) => {
+    busyRef.current = true
+    timerRef.current = window.setTimeout(async () => {
+      setTyping(true)
+      const history = base.map((m) => ({
+        role: m.from === 'me' ? ('user' as const) : ('assistant' as const),
+        content: m.quote ? `（引用 TA 的消息："${m.quote}"）${m.text}` : m.text,
+      }))
+      let started = false
+      const onDelta = (chunk: string) => {
+        if (!started) {
+          started = true
+          setTyping(false)
+        }
+        setStreaming((prev) => (prev ?? '') + chunk)
+      }
+      const ai = await aiStream(history, friend, loadProfile(), onDelta)
+      if (ai) {
+        setTyping(false)
+        setStreaming(null)
+        commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'friend', text: ai, time: Date.now() }])
+        busyRef.current = false
+      } else {
+        typewriter(makeReply(base[base.length - 1]?.text ?? '', friend, loadProfile()))
+      }
+    }, 900 + Math.random() * 600)
   }
 
   const send = () => {
     const text = draft.trim()
-    if (!text) return
+    if (!text || busyRef.current) return
+    if (editMsg) {
+      commit(msgsRef.current.map((m) => (m.id === editMsg.id ? { ...m, text, edited: true } : m)))
+      setEditMsg(null)
+      setDraft('')
+      showHint('已修改')
+      return
+    }
     setDraft('')
-    append({ id: uid(), friendId: friend.id, from: 'me', text, time: Date.now() })
-    timerRef.current = window.setTimeout(async () => {
-      const ai = await aiReply(text, friend, loadProfile())
-      append({
-        id: uid(),
-        friendId: friend.id,
-        from: 'friend',
-        text: ai ?? makeReply(text, friend, loadProfile()),
-        time: Date.now(),
-      })
-    }, 900 + Math.random() * 600)
+    const msg: Message = {
+      id: uid(),
+      friendId: friend.id,
+      from: 'me',
+      text,
+      time: Date.now(),
+      quote: replyQuote?.text,
+    }
+    setReplyQuote(null)
+    commit([...msgsRef.current, msg])
+    respond(msgsRef.current)
+  }
+
+  const startEdit = (m: Message) => {
+    setReplyQuote(null)
+    setMenuFor(null)
+    setEditMsg(m)
+    setDraft(m.text)
+  }
+
+  const cancelEdit = () => {
+    setEditMsg(null)
+    setDraft('')
+  }
+
+  const startQuote = (m: Message) => {
+    setMenuFor(null)
+    setEditMsg(null)
+    setDraft('')
+    setReplyQuote(m)
+  }
+
+  const regenerate = (m: Message) => {
+    setMenuFor(null)
+    if (busyRef.current) return
+    commit(msgsRef.current.filter((x) => x.id !== m.id))
+    respond(msgsRef.current)
+  }
+
+  const deleteOne = (m: Message) => {
+    setMenuFor(null)
+    commit(msgsRef.current.filter((x) => x.id !== m.id))
+    showHint('已删除')
+  }
+
+  const enterSelect = (m: Message) => {
+    setMenuFor(null)
+    setReplyQuote(null)
+    setEditMsg(null)
+    setDraft('')
+    setSelectMode(true)
+    setSelectedIds(new Set([m.id]))
+  }
+
+  const exitSelect = () => {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAll = () => {
+    setSelectedIds(new Set(msgsRef.current.map((m) => m.id)))
+  }
+
+  const deleteSelected = () => {
+    if (selectedIds.size === 0) return
+    commit(msgsRef.current.filter((m) => !selectedIds.has(m.id)))
+    showHint(`已删除 ${selectedIds.size} 条消息`)
+    exitSelect()
+  }
+
+  const copySelected = () => {
+    const text = msgsRef.current
+      .filter((m) => selectedIds.has(m.id))
+      .map((m) => `${m.from === 'me' ? '我' : friend.name}：${m.text}`)
+      .join('\n')
+    if (!text) return
+    doCopy(text)
+  }
+
+  const onTouchStart = (m: Message) => () => {
+    window.clearTimeout(pressRef.current)
+    pressRef.current = window.setTimeout(() => setMenuFor(m), 480)
+  }
+  const onTouchClear = () => window.clearTimeout(pressRef.current)
+  const onContextMenu = (m: Message) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    setMenuFor(m)
   }
 
   const lastMine = [...messages].reverse().find((m) => m.from === 'me')
+  const quoteBar = editMsg ?? replyQuote
 
   return (
     <div className="page chat-page">
@@ -109,10 +301,34 @@ export default function Chat({
         </button>
       </div>
 
+      {typing && (
+        <div className="chat-typing">
+          <span className="chat-typing-text">对方正在输入</span>
+          <span className="chat-typing-dots">
+            <i />
+            <i />
+            <i />
+          </span>
+        </div>
+      )}
+
+      {selectMode && (
+        <div className="chat-select-bar">
+          <button className="chat-select-cancel" onClick={exitSelect}>
+            取消
+          </button>
+          <span className="chat-select-count">已选择 {selectedIds.size} 条</span>
+          <button className="chat-select-all" onClick={selectAll}>
+            全选
+          </button>
+        </div>
+      )}
+
       <div className="chat-list" ref={listRef}>
         {messages.map((m, i) => {
           const showTime = i === 0 || m.time - messages[i - 1].time > 5 * 60 * 1000
           const tight = i > 0 && messages[i - 1].from === m.from && !showTime
+          const checked = selectedIds.has(m.id)
           return (
             <div key={m.id}>
               {showTime && (
@@ -121,14 +337,34 @@ export default function Chat({
                   <div>{formatTimeFull(m.time)}</div>
                 </div>
               )}
-              <div className={`chat-row ${m.from === 'me' ? 'me' : 'them'} ${tight ? 'tight' : ''}`}>
-                {m.from === 'friend' && (
+              <div className={`chat-row ${m.from === 'me' ? 'me' : 'them'} ${tight ? 'tight' : ''} ${selectMode ? 'selectable' : ''}`}>
+                {selectMode && (
+                  <span className={`chat-check ${checked ? 'on' : ''}`} onClick={() => toggleSelect(m.id)} role="button" tabIndex={0}>
+                    {checked && (
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 6.2 4.8 9 10 3.4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </span>
+                )}
+                {m.from === 'friend' && !selectMode && (
                   <span className="chat-avatar-btn" onClick={onEditFriend} role="button" tabIndex={0}>
                     <Avatar name={friend.name} src={friend.avatar} size={34} />
                   </span>
                 )}
-                <div className={`bubble ${m.from === 'me' ? 'bubble-me' : 'bubble-friend'}`}>
+                <div
+                  className={`bubble ${m.from === 'me' ? 'bubble-me' : 'bubble-friend'}`}
+                  onTouchStart={onTouchStart(m)}
+                  onTouchEnd={onTouchClear}
+                  onTouchMove={onTouchClear}
+                  onContextMenu={onContextMenu(m)}
+                  onClick={() => {
+                    if (selectMode) toggleSelect(m.id)
+                  }}
+                >
+                  {m.quote && <div className="bubble-quote">{m.quote}</div>}
                   {m.text}
+                  {m.edited && <span className="bubble-edited">已编辑</span>}
                   <svg
                     className={`bubble-tail ${m.from === 'me' ? 'tail-me' : 'tail-them'}`}
                     viewBox="0 0 10 19"
@@ -143,37 +379,123 @@ export default function Chat({
             </div>
           )
         })}
-        {lastMine && <div className="chat-read">{formatTime(lastMine.time)}已读</div>}
+        {streaming !== null && (
+          <div className="chat-row them">
+            <span className="chat-avatar-btn">
+              <Avatar name={friend.name} src={friend.avatar} size={34} />
+            </span>
+            <div className="bubble bubble-friend streaming">
+              {streaming}
+              <svg className="bubble-tail tail-them" viewBox="0 0 10 19" width="10" height="19" aria-hidden="true">
+                <path d="M0 0 C0.6 8 3.6 14.6 10 19 C4.4 18.6 0 15.6 0 10 Z" />
+              </svg>
+            </div>
+          </div>
+        )}
+        {!selectMode && lastMine && <div className="chat-read">{formatTime(lastMine.time)}已读</div>}
         {messages.length === 0 && <div className="empty-hint chat-empty">和 {friend.name} 打个招呼吧</div>}
       </div>
 
-      <div className="chat-input-bar">
-        <button className="chat-plus" aria-label="更多">
-          <PlusBadgeIcon />
-        </button>
-        <div className="chat-input-wrap">
-          <input
-            className="chat-input"
-            type="text"
-            placeholder="iMessage信息"
-            value={draft}
-            maxLength={500}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') send()
-            }}
-          />
-          {draft.trim() ? (
-            <button className="chat-send ready" onClick={send} aria-label="发送">
-              <SendIcon size={15} />
-            </button>
-          ) : (
-            <span className="chat-mic">
-              <MicIcon />
-            </span>
-          )}
+      {hint && <div className="chat-toast">{hint}</div>}
+
+      {!selectMode && quoteBar && (
+        <div className="chat-quote-bar">
+          <span className="chat-quote-label">{editMsg ? '编辑消息' : `引用 ${friend.name}`}</span>
+          <span className="chat-quote-preview">{quoteBar.text}</span>
+          <button className="chat-quote-close" onClick={editMsg ? cancelEdit : () => setReplyQuote(null)} aria-label="取消">
+            <svg width="9" height="9" viewBox="0 0 10 10">
+              <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
-      </div>
+      )}
+
+      {selectMode ? (
+        <div className="chat-select-actions">
+          <button className="chat-select-btn" disabled={selectedIds.size === 0} onClick={copySelected}>
+            复制
+          </button>
+          <button className="chat-select-btn danger" disabled={selectedIds.size === 0} onClick={deleteSelected}>
+            删除
+          </button>
+        </div>
+      ) : (
+        <div className="chat-input-bar">
+          <button className="chat-plus" aria-label="更多">
+            <PlusBadgeIcon />
+          </button>
+          <div className="chat-input-wrap">
+            <input
+              className="chat-input"
+              type="text"
+              placeholder={editMsg ? '修改这条消息' : 'iMessage信息'}
+              value={draft}
+              maxLength={500}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') send()
+              }}
+            />
+            {(draft.trim() || editMsg) && (
+              <button className="chat-send ready" onClick={send} aria-label={editMsg ? '保存' : '发送'}>
+                <SendIcon size={15} />
+              </button>
+            )}
+            {!draft.trim() && !editMsg && (
+              <span className="chat-mic">
+                <MicIcon />
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      <ActionSheet visible={menuFor !== null} onClose={() => setMenuFor(null)}>
+        {menuFor && (
+          <div className="sheet-group">
+            <button
+              className="sheet-item"
+              onClick={() => {
+                doCopy(menuFor.text)
+                setMenuFor(null)
+              }}
+            >
+              复制
+            </button>
+            {menuFor.from === 'friend' && (
+              <button
+                className="sheet-item"
+                onClick={() => {
+                  startQuote(menuFor)
+                }}
+              >
+                引用
+              </button>
+            )}
+            <button className="sheet-item" onClick={() => startEdit(menuFor)}>
+              编辑
+            </button>
+            {menuFor.from === 'friend' && (
+              <button className="sheet-item" onClick={() => regenerate(menuFor)}>
+                重新生成
+              </button>
+            )}
+            {menuFor.from === 'me' && (
+              <button className="sheet-item sheet-danger" onClick={() => deleteOne(menuFor)}>
+                删除
+              </button>
+            )}
+            <button className="sheet-item" onClick={() => enterSelect(menuFor)}>
+              多选
+            </button>
+          </div>
+        )}
+        <div className="sheet-group">
+          <button className="sheet-item sheet-cancel" onClick={() => setMenuFor(null)}>
+            取消
+          </button>
+        </div>
+      </ActionSheet>
     </div>
   )
 }

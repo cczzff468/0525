@@ -130,7 +130,22 @@ export function saveProfile(profile: Profile) {
 }
 
 export function loadMoments(): MomentsPost[] {
-  return read<MomentsPost[]>(MOMENTS_KEY, [])
+  const posts = read<MomentsPost[]>(MOMENTS_KEY, [])
+  let changed = false
+  for (const p of posts) {
+    for (const c of p.comments) {
+      if (!c.replyTo) {
+        const m = /^回复(.{1,20}?)：([\s\S]+)$/.exec(c.text)
+        if (m) {
+          c.replyTo = m[1]
+          c.text = m[2]
+          changed = true
+        }
+      }
+    }
+  }
+  if (changed) write(MOMENTS_KEY, posts)
+  return posts
 }
 
 export function saveMoments(posts: MomentsPost[]) {
@@ -272,7 +287,7 @@ const SEED_MOMENTS: MomentsPost[] = [
     likes: ['林小夏', '陈默'],
     comments: [
       { id: 'c1', name: '林小夏', text: '滤镜都不用调吧！带我带我去！' },
-      { id: 'c2', name: '苏晴', text: '回复林小夏：下一站一起呀' },
+      { id: 'c2', name: '苏晴', replyTo: '林小夏', text: '下一站一起呀' },
     ],
   },
   {

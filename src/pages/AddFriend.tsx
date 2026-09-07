@@ -159,12 +159,13 @@ export default function AddFriend({
             <input
               id="f-age"
               className="form-input form-input-age"
-              type="number"
-              min={1}
-              max={120}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               placeholder="1-120"
+              maxLength={3}
               value={age}
-              onChange={(e) => setAge(e.target.value)}
+              onChange={(e) => setAge(e.target.value.replace(/\D/g, '').slice(0, 3))}
             />
           </div>
           <div className="form-row">

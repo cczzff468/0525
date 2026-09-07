@@ -9,11 +9,13 @@ export default function Contacts({
   onOpenChat,
   onOpenFriend,
   onAddFriend,
+  onOpenMoments,
 }: {
   friends: Friend[]
   onOpenChat: (friendId: string) => void
   onOpenFriend: (friendId: string) => void
   onAddFriend: () => void
+  onOpenMoments: () => void
 }) {
   const [sheetOpen, setSheetOpen] = useState(false)
 
@@ -32,7 +34,7 @@ export default function Contacts({
       />
       <div className="page-body">
         <div className="list-group">
-          <button className="row" onClick={() => setSheetOpen(true)}>
+          <button className="row" onClick={onAddFriend}>
             <div className="row-icon" style={{ background: '#007aff' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                 <circle cx="10" cy="8.4" r="3" stroke="#fff" strokeWidth="1.8" />
@@ -79,7 +81,7 @@ export default function Contacts({
           ))}
         </div>
       </div>
-      <PlusSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} onAddFriend={onAddFriend} />
+      <PlusSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} onAddFriend={onAddFriend} onOpenMoments={onOpenMoments} />
     </div>
   )
 }

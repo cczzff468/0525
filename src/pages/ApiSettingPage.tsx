@@ -347,11 +347,12 @@ export default function ApiSettingPage({ onBack }: { onBack: () => void }) {
             <input
               id="api-tokens"
               className="form-input form-input-age"
-              type="number"
-              min={1}
-              max={128000}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
               value={cfg.maxTokens}
-              onChange={(e) => update({ maxTokens: Math.max(1, Number(e.target.value) || 1) })}
+              onChange={(e) => update({ maxTokens: Math.min(128000, Math.max(1, Number(e.target.value.replace(/\D/g, '')) || 1)) })}
             />
           </div>
         </div>

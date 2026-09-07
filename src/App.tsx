@@ -136,7 +136,7 @@ export default function App() {
       <div className="tab-shell">
         <div className="tab-content" key={tab}>
           {tab === 'messages' && (
-            <Messages friends={friends} messages={messages} onOpenChat={openChat} onAddFriend={() => setView({ name: 'addFriend' })} />
+            <Messages friends={friends} messages={messages} onOpenChat={openChat} onAddFriend={() => setView({ name: 'addFriend' })} onOpenMoments={() => setView({ name: 'moments' })} />
           )}
           {tab === 'contacts' && (
             <Contacts
@@ -144,6 +144,7 @@ export default function App() {
               onOpenChat={openChat}
               onOpenFriend={(friendId) => setView({ name: 'friendDetail', friendId })}
               onAddFriend={() => setView({ name: 'addFriend' })}
+              onOpenMoments={() => setView({ name: 'moments' })}
             />
           )}
           {tab === 'discover' && <Discover onOpenMoments={() => setView({ name: 'moments' })} />}

@@ -7,10 +7,12 @@ export function PlusSheet({
   visible,
   onClose,
   onAddFriend,
+  onOpenMoments,
 }: {
   visible: boolean
   onClose: () => void
   onAddFriend: () => void
+  onOpenMoments: () => void
 }) {
   const [render, setRender] = useState(visible)
   const [shown, setShown] = useState(false)
@@ -46,6 +48,24 @@ export function PlusSheet({
           </svg>
           <span>添加好友</span>
         </button>
+        <button
+          className="plus-pop-item"
+          onClick={() => {
+            onClose()
+            onOpenMoments()
+          }}
+        >
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="3" stroke="#fff" strokeWidth="1.8" />
+            <path
+              d="M6.2 6.8 7 5.6c.3-.5.8-.8 1.4-.8h7.2c.6 0 1.1.3 1.4.8l.8 1.2H20a1.6 1.6 0 0 1 1.6 1.6v8.8A1.6 1.6 0 0 1 20 18.8H4a1.6 1.6 0 0 1-1.6-1.6V8.4A1.6 1.6 0 0 1 4 6.8h2.2Z"
+              stroke="#fff"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span>发朋友圈</span>
+        </button>
       </div>
     </>
   )
@@ -56,11 +76,13 @@ export default function Messages({
   messages,
   onOpenChat,
   onAddFriend,
+  onOpenMoments,
 }: {
   friends: Friend[]
   messages: Message[]
   onOpenChat: (friendId: string) => void
   onAddFriend: () => void
+  onOpenMoments: () => void
 }) {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -122,7 +144,7 @@ export default function Messages({
           ))}
         </div>
       </div>
-      <PlusSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} onAddFriend={onAddFriend} />
+      <PlusSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} onAddFriend={onAddFriend} onOpenMoments={onOpenMoments} />
     </div>
   )
 }

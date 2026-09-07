@@ -38,31 +38,86 @@ export async function readServerError(res: Response): Promise<string> {
   return ''
 }
 
-export async function aiReply(userText: string, friend: Friend, me: Profile): Promise<string | null> {
+export async function aiStream(
+  history: { role: 'user' | 'assistant'; content: string }[],
+  friend: Friend,
+  me: Profile,
+  onDelta: (chunk: string) => void
+): Promise<string | null> {
   const cfg = loadApiSetting()
   if (!cfg.baseUrl.trim() || !cfg.model.trim()) return null
+  const payload = {
+    model: cfg.model.trim(),
+    temperature: cfg.temperature,
+    max_tokens: cfg.maxTokens,
+    messages: [
+      { role: 'system', content: systemPrompt(friend, me) },
+      ...history.slice(-20),
+    ],
+  }
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(cfg.apiKey.trim() ? { Authorization: `Bearer ${cfg.apiKey.trim()}` } : {}),
+  }
+
+  let full = ''
   try {
     const res = await fetch(chatUrl(cfg.baseUrl), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(cfg.apiKey.trim() ? { Authorization: `Bearer ${cfg.apiKey.trim()}` } : {}),
-      },
-      body: JSON.stringify({
-        model: cfg.model.trim(),
-        temperature: cfg.temperature,
-        max_tokens: cfg.maxTokens,
-        messages: [
-          { role: 'system', content: systemPrompt(friend, me) },
-          { role: 'user', content: userText },
-        ],
-      }),
+      headers,
+      body: JSON.stringify({ ...payload, stream: true }),
+    })
+    if (res.ok && res.body) {
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      let done = false
+      while (!done) {
+        const { value, done: rdDone } = await reader.read()
+        if (rdDone) break
+        buf += decoder.decode(value, { stream: true })
+        const events = buf.split('\n\n')
+        buf = events.pop() ?? ''
+        for (const ev of events) {
+          for (const line of ev.split('\n')) {
+            const t = line.trim()
+            if (!t.startsWith('data:')) continue
+            const data = t.slice(5).trim()
+            if (data === '[DONE]') {
+              done = true
+              break
+            }
+            try {
+              const delta = JSON.parse(data)?.choices?.[0]?.delta?.content
+              if (typeof delta === 'string' && delta) {
+                full += delta
+                onDelta(delta)
+              }
+            } catch {
+              /* partial json, ignore */
+            }
+          }
+        }
+      }
+      if (full.trim()) return full.trim().slice(0, 2000)
+    }
+  } catch {
+    /* fall through to non-stream */
+  }
+
+  try {
+    const res = await fetch(chatUrl(cfg.baseUrl), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
     })
     if (!res.ok) return null
     const data = await res.json()
     const content = data?.choices?.[0]?.message?.content
     if (typeof content !== 'string' || !content.trim()) return null
-    return content.trim().slice(0, 300)
+    const text = content.trim().slice(0, 2000)
+    onDelta(text)
+    return text
   } catch {
     return null
   }

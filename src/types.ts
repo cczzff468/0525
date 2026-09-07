@@ -17,6 +17,8 @@ export interface Message {
   from: 'me' | 'friend'
   text: string
   time: number
+  edited?: boolean
+  quote?: string
 }
 
 export interface Profile {
@@ -44,6 +46,7 @@ export interface MomentComment {
   id: string
   name: string
   text: string
+  replyTo?: string
 }
 
 export interface MomentsPost {

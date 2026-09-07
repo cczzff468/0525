@@ -20,6 +20,7 @@ export default function Moments({ onBack }: { onBack: () => void }) {
   const [composing, setComposing] = useState<{ images: string[] } | null>(null)
   const [openMenuId, setOpenMenuId] = useState('')
   const [commentFor, setCommentFor] = useState('')
+  const [commentReplyTo, setCommentReplyTo] = useState('')
   const [commentText, setCommentText] = useState('')
   const cameraRef = useRef<HTMLInputElement>(null)
   const albumRef = useRef<HTMLInputElement>(null)
@@ -93,10 +94,11 @@ export default function Moments({ onBack }: { onBack: () => void }) {
     const all = loadMoments()
     const post = all.find((p) => p.id === postId)
     if (!post) return
-    post.comments.push({ id: uid(), name: loadProfile().name, text })
+    post.comments.push({ id: uid(), name: loadProfile().name, text, replyTo: commentReplyTo || undefined })
     saveMoments(all)
     setCommentText('')
     setCommentFor('')
+    setCommentReplyTo('')
     reload()
   }
 
@@ -191,6 +193,7 @@ export default function Moments({ onBack }: { onBack: () => void }) {
                             className="moment-menu-btn"
                             onClick={() => {
                               setOpenMenuId('')
+                              setCommentReplyTo('')
                               setCommentFor(post.id)
                             }}
                           >
@@ -233,8 +236,24 @@ export default function Moments({ onBack }: { onBack: () => void }) {
                         </div>
                       )}
                       {post.comments.map((c) => (
-                        <div className="moment-comment" key={c.id}>
-                          <span className="moment-comment-name">{c.name}</span>：{c.text}
+                        <div
+                          className="moment-comment"
+                          key={c.id}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (c.name === profile.name) return
+                            setCommentFor(post.id)
+                            setCommentReplyTo(c.name)
+                          }}
+                        >
+                          <span className="moment-comment-name">{c.name}</span>
+                          {c.replyTo && (
+                            <>
+                              {' '}
+                              回复 <span className="moment-comment-name">{c.replyTo}</span>
+                            </>
+                          )}
+                          ：{c.text}
                         </div>
                       ))}
                     </div>
@@ -245,7 +264,7 @@ export default function Moments({ onBack }: { onBack: () => void }) {
                       <input
                         autoFocus
                         type="text"
-                        placeholder="评论"
+                        placeholder={commentReplyTo ? `回复 ${commentReplyTo}` : '评论'}
                         value={commentText}
                         maxLength={200}
                         onChange={(e) => setCommentText(e.target.value)}
