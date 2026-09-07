@@ -2,7 +2,9 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { letterAvatar } from '../store'
 
 export function Avatar({ name, src, size = 48 }: { name: string; src?: string; size?: number }) {
-  const url = src || letterAvatar(name)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [src])
+  const url = !failed && src ? src : letterAvatar(name)
   return (
     <img
       className="avatar"
@@ -10,6 +12,9 @@ export function Avatar({ name, src, size = 48 }: { name: string; src?: string; s
       alt={name}
       style={{ width: size, height: size, borderRadius: '50%' }}
       draggable={false}
+      onError={() => {
+        if (src) setFailed(true)
+      }}
     />
   )
 }

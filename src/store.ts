@@ -1,4 +1,4 @@
-import type { ApiSetting, ChatBg, Friend, MemoryData, MemorySetting, Message, MomentsPost, Persona, Profile, Sticker, VoiceConfig } from './types'
+import type { ApiSetting, ChatBg, Friend, LocationItem, MemoryData, MemorySetting, Message, MomentsPost, Persona, Profile, Sticker, VoiceConfig } from './types'
 
 const FRIENDS_KEY = 'im.friends'
 const MSGS_KEY = 'im.messages'
@@ -12,8 +12,9 @@ const ACTIVE_PERSONA_KEY = 'im.activePersona'
 const MEMORY_KEY = 'im.memory'
 const CHATBG_KEY = 'im.chatbg'
 const STICKERS_KEY = 'im.stickers'
+const LOCATIONS_KEY = 'im.locations'
 
-const ALL_KEYS = [FRIENDS_KEY, MSGS_KEY, PROFILE_KEY, MOMENTS_KEY, COVER_KEY, UI_KEY, API_KEY_STORE, PERSONAS_KEY, ACTIVE_PERSONA_KEY, MEMORY_KEY, CHATBG_KEY, STICKERS_KEY]
+const ALL_KEYS = [FRIENDS_KEY, MSGS_KEY, PROFILE_KEY, MOMENTS_KEY, COVER_KEY, UI_KEY, API_KEY_STORE, PERSONAS_KEY, ACTIVE_PERSONA_KEY, MEMORY_KEY, CHATBG_KEY, STICKERS_KEY, LOCATIONS_KEY]
 const DB_NAME = 'ios-im'
 const STORE_NAME = 'kv'
 
@@ -293,6 +294,14 @@ export function loadStickers(): Sticker[] {
 
 export function saveStickers(list: Sticker[]) {
   write(STICKERS_KEY, list)
+}
+
+export function loadLocations(): LocationItem[] {
+  return read<LocationItem[]>(LOCATIONS_KEY, [])
+}
+
+export function saveLocations(list: LocationItem[]) {
+  write(LOCATIONS_KEY, list)
 }
 
 

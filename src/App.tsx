@@ -19,6 +19,7 @@ import ChatSearch from './pages/ChatSearch'
 import ChatBackground from './pages/ChatBackground'
 import TranslateLang from './pages/TranslateLang'
 import StickerPage from './pages/StickerPage'
+import LocationPage from './pages/LocationPage'
 import { ChatIcon, ContactsIcon, DiscoverIcon, MeIcon } from './components/icons'
 import { loadFriends, loadMessages, loadUiState, saveFriends, saveMessages, saveUiState } from './store'
 import type { Friend, Message } from './types'
@@ -42,6 +43,7 @@ type View =
   | { name: 'chatBg'; friendId: string }
   | { name: 'translateLang'; friendId: string }
   | { name: 'stickers' }
+  | { name: 'location'; friendId: string }
 
 const TABS: { key: Tab; label: string; icon: (active: boolean) => JSX.Element }[] = [
   { key: 'messages', label: '信息', icon: (a) => <ChatIcon active={a} /> },
@@ -78,6 +80,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>(() => loadMessages())
   const [tab, setTab] = useState<Tab>(init.tab)
   const [view, setView] = useState<View>(init.view)
+  const [pendingLocation, setPendingLocation] = useState<{ name: string; address?: string } | null>(null)
 
   useEffect(() => {
     saveUiState({ tab, view })
@@ -121,12 +124,25 @@ export default function App() {
         onOpenSettings={() => setView({ name: 'apiSetting' })}
         onOpenChatSettings={() => setView({ name: 'chatSettings', friendId: view.friendId })}
         onOpenStickers={() => setView({ name: 'stickers' })}
+        onOpenLocation={() => setView({ name: 'location', friendId: view.friendId })}
+        pendingLocation={pendingLocation}
+        onConsumeLocation={() => setPendingLocation(null)}
         jumpTo={view.jumpTo}
       />
     ) : (
       <div className="page">
         <div className="empty-hint">好友不存在</div>
       </div>
+    )
+  } else if (view.name === 'location') {
+    content = (
+      <LocationPage
+        onBack={() => setView({ name: 'chat', friendId: view.friendId })}
+        onSend={(loc) => {
+          setPendingLocation(loc)
+          setView({ name: 'chat', friendId: view.friendId })
+        }}
+      />
     )
   } else if (view.name === 'chatSettings') {
     const friend = friends.find((f) => f.id === view.friendId)

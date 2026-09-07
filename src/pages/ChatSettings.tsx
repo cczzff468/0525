@@ -218,6 +218,13 @@ export default function ChatSettings({
             </div>
             <Switch on={cur.stickerEnabled !== false} onChange={(v) => patchFriend({ stickerEnabled: v })} />
           </div>
+          <div className="row">
+            <div className="row-main">
+              <span className="row-title">分句发送</span>
+              <span className="row-preview">开启后你连发多条消息 TA 都不回复，清空输入框点发送键，TA 才统一回复（表情包、位置、照片同样适用）</span>
+            </div>
+            <Switch on={Boolean(cur.queuedSend)} onChange={(v) => patchFriend({ queuedSend: v })} />
+          </div>
         </div>
 
         <div className="list-group">

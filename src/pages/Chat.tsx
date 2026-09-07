@@ -63,24 +63,124 @@ function msgWidth(text: string): number {
   return text.length * 15 + 26
 }
 
-const STICKER_RE = /\[表情[:：]([^\[\]]{1,12})\]/g
+const CONTENT_RE = /\[表情[:：]([^\[\]]{1,12})\]|\[位置[:：]([^\[\]]{1,20})\]|\[文字图片[:：]([^\[\]]{1,60})\]/g
 
-type StickerFrag = { t: 'text'; v: string } | { t: 'img'; url: string }
+type StickerFrag =
+  | { t: 'text'; v: string }
+  | { t: 'img'; url: string }
+  | { t: 'loc'; name: string }
+  | { t: 'txtimg'; v: string }
 
-function parseStickerText(text: string, custom: Sticker[]): StickerFrag[] {
+function findSticker(custom: Sticker[], name: string): Sticker | undefined {
+  return custom.find((s) => s.meaning === name) ?? custom.find((s) => s.meaning.includes(name) || name.includes(s.meaning))
+}
+
+function parseChatContent(text: string, custom: Sticker[]): StickerFrag[] {
   const frags: StickerFrag[] = []
   let last = 0
-  STICKER_RE.lastIndex = 0
+  CONTENT_RE.lastIndex = 0
   let m: RegExpExecArray | null
-  while ((m = STICKER_RE.exec(text))) {
+  while ((m = CONTENT_RE.exec(text))) {
     if (m.index > last) frags.push({ t: 'text', v: text.slice(last, m.index) })
-    const name = m[1].trim()
-    const c = custom.find((s) => s.meaning === name) ?? custom.find((s) => s.meaning.includes(name) || name.includes(s.meaning))
-    if (c) frags.push({ t: 'img', url: c.url })
+    if (m[1] !== undefined) {
+      const c = findSticker(custom, m[1].trim())
+      if (c) frags.push({ t: 'img', url: c.url })
+    } else if (m[2] !== undefined) {
+      frags.push({ t: 'loc', name: m[2].trim() })
+    } else {
+      frags.push({ t: 'txtimg', v: m[3].trim() })
+    }
     last = m.index + m[0].length
   }
   if (last < text.length) frags.push({ t: 'text', v: text.slice(last) })
   return frags
+}
+
+function makeTextImage(text: string): string {
+  const W = 800
+  const H = 800
+  const pad = 90
+  const maxW = W - pad * 2
+  const font = (size: number) => `600 ${size}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`
+  const measure = document.createElement('canvas').getContext('2d')!
+  const wrap = (size: number): string[] => {
+    measure.font = font(size)
+    const lines: string[] = []
+    let cur = ''
+    for (const ch of text) {
+      if (ch === '\n') {
+        lines.push(cur)
+        cur = ''
+        continue
+      }
+      if (cur && measure.measureText(cur + ch).width > maxW) {
+        lines.push(cur)
+        cur = ch
+      } else {
+        cur += ch
+      }
+    }
+    lines.push(cur)
+    return lines
+  }
+  let fontSize = text.length <= 6 ? 96 : text.length <= 16 ? 72 : 56
+  let lines = wrap(fontSize)
+  while (lines.length * fontSize * 1.5 > H - pad * 1.6 && fontSize > 30) {
+    fontSize -= 6
+    lines = wrap(fontSize)
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, W, H)
+  ctx.font = font(fontSize)
+  ctx.fillStyle = '#1a1a1a'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const lineH = fontSize * 1.5
+  lines.forEach((l, i) => ctx.fillText(l, W / 2, H / 2 + (i - (lines.length - 1) / 2) * lineH))
+  return canvas.toDataURL('image/png')
+}
+
+const SEG_PUNCT = /^[\s.,，、;；:：!！?？~～…·—–\-'"“”‘’()（）【】\[\]《》<>「」『』*&#@\\/|+=%￥$^_]+$/
+const LEADING_PUNCT = /^[\s.,，、;；:：!！?？~～…·—–\-]+/
+
+function cleanSeg(s: string, stripLead = false): string {
+  let t = s.trim()
+  if (stripLead) t = t.replace(LEADING_PUNCT, '').trim()
+  if (!t || SEG_PUNCT.test(t)) return ''
+  return t
+}
+
+function splitReplyMsgs(part: string, stickers: Sticker[], friendId: string): Message[] {
+  const out: Message[] = []
+  const mk = (extra: Partial<Message>): Message => ({ id: uid(), friendId, from: 'friend', text: '', time: Date.now(), ...extra })
+  let last = 0
+  CONTENT_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = CONTENT_RE.exec(part))) {
+    if (m.index > last) {
+      const t = cleanSeg(part.slice(last, m.index))
+      if (t) out.push(mk({ text: t }))
+    }
+    if (m[1] !== undefined) {
+      const name = m[1].trim()
+      const c = findSticker(stickers, name)
+      if (c) out.push(mk({ text: name, sticker: { meaning: name, url: c.url } }))
+    } else if (m[2] !== undefined) {
+      const name = m[2].trim()
+      out.push(mk({ text: `[位置:${name}]`, location: { name } }))
+    } else if (m[3] !== undefined) {
+      const v = m[3].trim()
+      out.push(mk({ text: v, sticker: { meaning: '文字图片', url: makeTextImage(v) } }))
+    }
+    last = m.index + m[0].length
+  }
+  const tail = cleanSeg(part.slice(last), true)
+  if (tail) out.push(mk({ text: tail }))
+  return out.length > 0 ? out : [mk({ text: part.trim() })]
 }
 
 export default function Chat({
@@ -90,6 +190,9 @@ export default function Chat({
   onOpenSettings,
   onOpenChatSettings,
   onOpenStickers,
+  onOpenLocation,
+  pendingLocation,
+  onConsumeLocation,
   jumpTo,
 }: {
   friend: Friend
@@ -98,6 +201,9 @@ export default function Chat({
   onOpenSettings: () => void
   onOpenChatSettings: () => void
   onOpenStickers: () => void
+  onOpenLocation: () => void
+  pendingLocation: { name: string; address?: string } | null
+  onConsumeLocation: () => void
   jumpTo?: string
 }) {
   const [messages, setMessages] = useState<Message[]>(() =>
@@ -121,6 +227,9 @@ export default function Chat({
   const [myStickers, setMyStickers] = useState<Sticker[]>(() => loadStickers())
   const [uploadQueue, setUploadQueue] = useState<string[]>([])
   const [meaningDraft, setMeaningDraft] = useState('')
+  const [textImageOpen, setTextImageOpen] = useState(false)
+  const [textImageDraft, setTextImageDraft] = useState('')
+  const [queuedCount, setQueuedCount] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<number>(0)
   const pressRef = useRef<number>(0)
@@ -154,7 +263,11 @@ export default function Chat({
 
   useEffect(
     () => () => {
-      window.clearTimeout(timerRef.current)
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current)
+        timerRef.current = 0
+        busyRef.current = false
+      }
       window.clearTimeout(pressRef.current)
       try {
         recogRef.current?.stop()
@@ -353,17 +466,18 @@ export default function Chat({
         setTyping(false)
         setStreaming(null)
         const parts = splitBurst(text, friend.burstCount ?? 10)
-        if (parts.length > 1) {
-          for (let i = 0; i < parts.length; i++) {
-            if (i > 0) {
+        const units = parts.map((p) => splitReplyMsgs(p, loadStickers(), friend.id))
+        for (let i = 0; i < units.length; i++) {
+          for (let j = 0; j < units[i].length; j++) {
+            if (j > 0) {
+              await sleep(180 + Math.random() * 160)
+            } else if (i > 0) {
               setTyping(true)
               await sleep(300 + Math.random() * 400)
               setTyping(false)
             }
-            commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'friend', text: parts[i], time: Date.now() }])
+            commit([...msgsRef.current, units[i][j]])
           }
-        } else {
-          commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'friend', text, time: Date.now() }])
         }
         busyRef.current = false
         if (truncated) setErrModal({ title: '回复被截断', desc: ERR_TEXT.toolong.desc })
@@ -374,9 +488,24 @@ export default function Chat({
     }, 900 + Math.random() * 600)
   }
 
+  const afterSend = () => {
+    if (friend.queuedSend) {
+      setQueuedCount((n) => n + 1)
+    } else {
+      respond()
+    }
+  }
+
   const send = () => {
     const text = draft.trim()
-    if (!text || busyRef.current) return
+    if (!text) {
+      if (!editMsg && friend.queuedSend && queuedCount > 0 && !busyRef.current) {
+        setQueuedCount(0)
+        respond()
+      }
+      return
+    }
+    if (busyRef.current) return
     if (editMsg) {
       commit(msgsRef.current.map((m) => (m.id === editMsg.id ? { ...m, text } : m)))
       setEditMsg(null)
@@ -395,13 +524,13 @@ export default function Chat({
     }
     setReplyQuote(null)
     commit([...msgsRef.current, msg])
-    respond()
+    afterSend()
   }
 
   const sendSticker = (payload: { meaning: string; url?: string; emoji?: string }) => {
     if (busyRef.current || editMsg) return
     commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'me', text: payload.meaning, time: Date.now(), sticker: payload }])
-    respond()
+    afterSend()
   }
 
   const sendImageMsg = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -415,10 +544,43 @@ export default function Chat({
     try {
       const url = await fileToPhoto(file)
       commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'me', text: '[图片]', time: Date.now(), sticker: { meaning: '发了一张图片', url } }])
-      respond()
+      afterSend()
     } catch {
       showHint('图片读取失败，请换一张试试')
     }
+  }
+
+  const sendLocation = (loc: { name: string; address?: string }) => {
+    if (editMsg) {
+      showHint('编辑消息时不能发位置')
+      return
+    }
+    commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'me', text: `[位置:${loc.name}]`, time: Date.now(), location: loc }])
+    if (!busyRef.current) afterSend()
+  }
+
+  useEffect(() => {
+    if (!pendingLocation) return
+    sendLocation(pendingLocation)
+    onConsumeLocation()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingLocation])
+
+  const sendTextImage = () => {
+    const content = textImageDraft.trim()
+    if (!content) {
+      showHint('先输入要生成图片的文字')
+      return
+    }
+    if (busyRef.current || editMsg) {
+      showHint('等对方说完再发哦')
+      return
+    }
+    const url = makeTextImage(content)
+    setTextImageOpen(false)
+    setTextImageDraft('')
+    commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'me', text: content, time: Date.now(), sticker: { meaning: '文字图片', url } }])
+    afterSend()
   }
 
   const saveStickerFromQueue = (meaning: string) => {
@@ -682,6 +844,37 @@ export default function Chat({
                     >
                       <img className="sticker-msg-img" src={m.sticker.url} alt={m.sticker.meaning} draggable={false} />
                     </div>
+                  ) : m.location && !m.quote ? (
+                    <div
+                      className="loc-bare"
+                      onTouchStart={onTouchStart(m)}
+                      onTouchEnd={onTouchClear}
+                      onTouchMove={onTouchClear}
+                      onContextMenu={onContextMenu(m)}
+                      onClick={() => {
+                        if (selectMode) toggleSelect(m.id)
+                      }}
+                    >
+                      <span className="loc-card">
+                        <span className="loc-map">
+                          <svg viewBox="0 0 200 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                            <rect width="200" height="90" fill="#dcecd8" />
+                            <path d="M0 32 H200" stroke="#f7fbf5" strokeWidth="11" />
+                            <path d="M64 0 V90" stroke="#f7fbf5" strokeWidth="9" />
+                            <path d="M136 0 V90" stroke="#f7fbf5" strokeWidth="6" />
+                            <path d="M0 68 H200" stroke="#f7fbf5" strokeWidth="5" />
+                            <circle cx="30" cy="16" r="9" fill="#cde4c7" />
+                            <circle cx="170" cy="76" r="12" fill="#cde4c7" />
+                            <path d="M100 26c-8 0-14 6-14 13.5C86 49.5 100 62 100 62s14-12.5 14-22.5C114 32 108 26 100 26Z" fill="#e5533d" />
+                            <circle cx="100" cy="39" r="5" fill="#fff" />
+                          </svg>
+                        </span>
+                        <span className="loc-info">
+                          <span className="loc-name">{m.location.name}</span>
+                          <span className="loc-addr">{m.location.address || '位置'}</span>
+                        </span>
+                      </span>
+                    </div>
                   ) : (
                     <div
                       className={`bubble ${m.from === 'me' ? 'bubble-me' : 'bubble-friend'} ${m.sticker ? 'bubble-sticker' : ''}`}
@@ -701,9 +894,21 @@ export default function Chat({
                           <img className="sticker-msg-img" src={m.sticker.url} alt={m.sticker.meaning} draggable={false} />
                         )
                       ) : (
-                        parseStickerText(m.text, myStickers).map((f, i) =>
+                        parseChatContent(m.text, myStickers).map((f, i) =>
                           f.t === 'text' ? (
                             <span key={i}>{f.v}</span>
+                          ) : f.t === 'txtimg' ? (
+                            <span key={i} className="txtimg-inline">
+                              {f.v}
+                            </span>
+                          ) : f.t === 'loc' ? (
+                            <span key={i} className="loc-card loc-card-inline">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M12 21c4.2-4.2 6.5-7.4 6.5-10.5a6.5 6.5 0 1 0-13 0C5.5 13.6 7.8 16.8 12 21Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                                <circle cx="12" cy="10.5" r="2.4" stroke="currentColor" strokeWidth="1.8" />
+                              </svg>
+                              {f.name}
+                            </span>
                           ) : (
                             <img key={i} className="sticker-inline big" src={f.url} alt="" draggable={false} />
                           )
@@ -752,9 +957,11 @@ export default function Chat({
         })}
         {typing && streaming === null && (
           <div className="chat-row them">
-            <span className="chat-avatar-btn">
-              <Avatar name={friend.name} src={friend.avatar} size={34} />
-            </span>
+            {friend.avatarStyle !== 'none' && (
+              <span className="chat-avatar-btn">
+                <Avatar name={friend.name} src={friend.avatar} size={34} />
+              </span>
+            )}
             <div className="bubble bubble-friend">
               <span className="chat-typing-dots typing-in-bubble">
                 <i />
@@ -769,13 +976,27 @@ export default function Chat({
         )}
         {streaming !== null && (
           <div className="chat-row them">
-            <span className="chat-avatar-btn">
-              <Avatar name={friend.name} src={friend.avatar} size={34} />
-            </span>
+            {friend.avatarStyle !== 'none' && (
+              <span className="chat-avatar-btn">
+                <Avatar name={friend.name} src={friend.avatar} size={34} />
+              </span>
+            )}
             <div className="bubble bubble-friend streaming">
-              {parseStickerText(streaming, myStickers).map((f, i) =>
+              {parseChatContent(streaming, myStickers).map((f, i) =>
                 f.t === 'text' ? (
                   <span key={i}>{f.v}</span>
+                ) : f.t === 'txtimg' ? (
+                  <span key={i} className="txtimg-inline">
+                    {f.v}
+                  </span>
+                ) : f.t === 'loc' ? (
+                  <span key={i} className="loc-card loc-card-inline">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 21c4.2-4.2 6.5-7.4 6.5-10.5a6.5 6.5 0 1 0-13 0C5.5 13.6 7.8 16.8 12 21Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                      <circle cx="12" cy="10.5" r="2.4" stroke="currentColor" strokeWidth="1.8" />
+                    </svg>
+                    {f.name}
+                  </span>
                 ) : (
                   <img key={i} className="sticker-inline big" src={f.url} alt="" draggable={false} />
                 )
@@ -852,7 +1073,7 @@ export default function Chat({
                   if (e.key === 'Enter') send()
                 }}
               />
-              {!draft.trim() && !editMsg && (
+              {!draft.trim() && !editMsg && !(friend.queuedSend && queuedCount > 0) && (
                 <button
                   className={`chat-mic ${listening ? 'listening' : ''}`}
                   onClick={startVoice}
@@ -876,8 +1097,12 @@ export default function Chat({
                   <path d="M8 14.2c1 1.4 2.4 2.1 4 2.1s3-.7 4-2.1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
                 </svg>
               </button>
-              {(draft.trim() || editMsg) && (
-                <button className="chat-send ready" onClick={send} aria-label={editMsg ? '保存' : '发送'}>
+              {(draft.trim() || editMsg || (friend.queuedSend && queuedCount > 0)) && (
+                <button
+                  className="chat-send ready"
+                  onClick={send}
+                  aria-label={editMsg ? '保存' : queuedCount > 0 ? '让 TA 回复' : '发送'}
+                >
                   <SendIcon size={15} />
                 </button>
               )}
@@ -946,7 +1171,13 @@ export default function Chat({
                   </span>
                   <span className="plus-label">图片</span>
                 </button>
-                <button className="plus-item" onClick={() => showHint('文字图片即将上线')}>
+                <button
+                  className="plus-item"
+                  onClick={() => {
+                    setPlusOpen(false)
+                    setTextImageOpen(true)
+                  }}
+                >
                   <span className="plus-icon">
                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
                       <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" stroke="#7a7a80" strokeWidth="1.6" />
@@ -973,7 +1204,13 @@ export default function Chat({
                   </span>
                   <span className="plus-label">红包</span>
                 </button>
-                <button className="plus-item" onClick={() => showHint('位置功能即将上线')}>
+                <button
+                  className="plus-item"
+                  onClick={() => {
+                    setPlusOpen(false)
+                    onOpenLocation()
+                  }}
+                >
                   <span className="plus-icon">
                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
                       <path d="M12 21c4.2-4.2 6.5-7.4 6.5-10.5a6.5 6.5 0 1 0-13 0C5.5 13.6 7.8 16.8 12 21Z" stroke="#7a7a80" strokeWidth="1.6" strokeLinejoin="round" />
@@ -1071,6 +1308,26 @@ export default function Chat({
           onKeyDown={(e) => {
             if (e.key === 'Enter') saveStickerFromQueue(meaningDraft)
           }}
+          autoFocus
+        />
+      </Modal>
+
+      <Modal
+        open={textImageOpen}
+        title="文字图片"
+        buttons={[
+          { label: '取消', onClick: () => setTextImageOpen(false) },
+          { label: '发送', primary: true, onClick: sendTextImage },
+        ]}
+      >
+        <div className="modal-tip">输入文字，生成一张文字图片发送（对方和 AI 都能看到内容）</div>
+        <textarea
+          className="sticker-url-input text-image-input"
+          rows={3}
+          placeholder="写点想说的…"
+          maxLength={120}
+          value={textImageDraft}
+          onChange={(e) => setTextImageDraft(e.target.value)}
           autoFocus
         />
       </Modal>

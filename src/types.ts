@@ -20,6 +20,7 @@ export interface Friend {
   timeFormat?: 'hm' | 'hms'
   readStyle?: 'off' | 'avatar' | 'bubble'
   stickerEnabled?: boolean
+  queuedSend?: boolean
   prompt?: string
   createdAt: number
 }
@@ -44,6 +45,13 @@ export interface Message {
   time: number
   quote?: string
   sticker?: { meaning: string; url?: string; emoji?: string }
+  location?: { name: string; address?: string }
+}
+
+export interface LocationItem {
+  id: string
+  name: string
+  address: string
 }
 
 export interface Profile {

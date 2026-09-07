@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     allowedHosts: ['.monkeycode-ai.online'],
+    hmr: false,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
