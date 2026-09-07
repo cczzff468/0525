@@ -755,6 +755,7 @@ button:disabled {
 
 .chat-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 12px 12px 6px;
   display: flex;
@@ -823,13 +824,6 @@ button:disabled {
   transform: scaleX(-1);
 }
 
-.chat-read {
-  text-align: right;
-  font-size: 11px;
-  color: var(--secondary);
-  padding: 4px 6px 0;
-}
-
 .chat-empty {
   margin-top: 40px;
 }
@@ -852,6 +846,49 @@ button:disabled {
   border-radius: 50%;
   color: var(--label);
   flex-shrink: 0;
+}
+
+.chat-plus.on {
+  background: #e5e5ea;
+}
+
+.plus-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px 10px;
+  padding: 10px 6px 6px;
+  overflow-y: auto;
+}
+
+.plus-item {
+  border: none;
+  background: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.plus-icon {
+  width: 58px;
+  height: 58px;
+  background: #fff;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.plus-item:active .plus-icon {
+  background: #ececf0;
+}
+
+.plus-label {
+  font-size: 11px;
+  color: #6d6d72;
 }
 
 .chat-input-wrap {
@@ -3994,10 +4031,314 @@ button:disabled {
   padding: 3px 5px 0;
 }
 
-.chat-row.me .chat-meta.under {
+.chat-row.them .chat-meta.under {
+  align-self: flex-end;
   text-align: right;
+}
+
+.chat-row.me .chat-meta.under {
+  align-self: flex-start;
+  text-align: left;
 }
 
 .chat-meta.unread {
   color: #b0b0b6;
+}
+
+/* ===== 表情包 ===== */
+.chat-sticker-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: #8e8e93;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.chat-sticker-btn.on {
+  color: #0a84ff;
+}
+
+.sticker-panel {
+  border-top: 0.5px solid var(--separator);
+  background: #f6f6f8;
+  padding: 8px 10px calc(6px + env(safe-area-inset-bottom));
+  animation: sticker-panel-up 0.22s ease;
+}
+
+@keyframes sticker-panel-up {
+  from {
+    transform: translateY(40%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  height: 216px;
+  overflow-y: auto;
+}
+
+.sticker-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.sticker-cell:active {
+  background: #e5e5ea;
+}
+
+.sticker-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.sticker-add {
+  color: #c7c7cc;
+}
+
+.sticker-add:active {
+  background: none;
+}
+
+.sticker-inline {
+  display: inline-block;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  vertical-align: -7px;
+  margin: 0 1px;
+}
+
+.sticker-inline.big {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.bubble-sticker {
+  padding: 4px;
+  line-height: 0;
+}
+
+.sticker-emoji {
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: 52px;
+  line-height: 1.1;
+  display: block;
+}
+
+.sticker-bare {
+  display: inline-block;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.sticker-msg-img {
+  max-width: 128px;
+  max-height: 128px;
+  min-width: 84px;
+  min-height: 84px;
+  object-fit: contain;
+  display: block;
+}
+
+.sticker-cell-mine img {
+  width: 92%;
+  height: 92%;
+  border-radius: 6px;
+}
+
+.sticker-add {
+  border: 1.5px dashed #c7c7cc;
+  color: #c7c7cc;
+  border-radius: 10px;
+}
+
+.sticker-add:active {
+  background: #ececf0;
+}
+
+.sticker-mine-empty {
+  grid-column: 1 / -1;
+  height: 216px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.sticker-mine-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6d6d72;
+  margin-top: 6px;
+}
+
+.sticker-mine-empty-sub {
+  font-size: 12px;
+  color: #a0a0a8;
+}
+
+.sticker-mine-empty-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.sticker-mine-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sticker-mine-btn.primary {
+  background: #0a84ff;
+  color: #fff;
+}
+
+.sticker-mine-btn.primary:active {
+  opacity: 0.8;
+}
+
+.sticker-mine-btn.ghost {
+  background: #fff;
+  color: #0a84ff;
+}
+
+.sticker-mine-btn.ghost:active {
+  background: #ececf0;
+}
+
+.sticker-upload-preview {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.sticker-upload-preview img {
+  max-width: 120px;
+  max-height: 120px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+/* 表情包管理页 */
+.sticker-actions {
+  display: flex;
+  gap: 10px;
+  padding: 12px 0 4px;
+}
+
+.sticker-action-btn {
+  flex: 1;
+  border: none;
+  background: #0a84ff;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.sticker-action-btn:disabled {
+  opacity: 0.5;
+}
+
+.sticker-vision-tip {
+  font-size: 12px;
+  color: #8e8e93;
+  padding: 4px 2px 0;
+  line-height: 1.5;
+}
+
+.sticker-empty {
+  margin-top: 48px;
+}
+
+.sticker-manage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 12px 0 20px;
+}
+
+.sticker-manage-cell {
+  position: relative;
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.sticker-manage-cell img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+.sticker-manage-meaning {
+  font-size: 12px;
+  color: var(--label);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sticker-manage-del {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.sticker-url-input {
+  width: 100%;
+  border: 1px solid var(--separator);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
 }

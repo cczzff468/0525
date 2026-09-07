@@ -1,4 +1,4 @@
-import type { ApiSetting, ChatBg, Friend, MemoryData, MemorySetting, Message, MomentsPost, Persona, Profile, VoiceConfig } from './types'
+import type { ApiSetting, ChatBg, Friend, MemoryData, MemorySetting, Message, MomentsPost, Persona, Profile, Sticker, VoiceConfig } from './types'
 
 const FRIENDS_KEY = 'im.friends'
 const MSGS_KEY = 'im.messages'
@@ -11,8 +11,9 @@ const PERSONAS_KEY = 'im.personas'
 const ACTIVE_PERSONA_KEY = 'im.activePersona'
 const MEMORY_KEY = 'im.memory'
 const CHATBG_KEY = 'im.chatbg'
+const STICKERS_KEY = 'im.stickers'
 
-const ALL_KEYS = [FRIENDS_KEY, MSGS_KEY, PROFILE_KEY, MOMENTS_KEY, COVER_KEY, UI_KEY, API_KEY_STORE, PERSONAS_KEY, ACTIVE_PERSONA_KEY, MEMORY_KEY, CHATBG_KEY]
+const ALL_KEYS = [FRIENDS_KEY, MSGS_KEY, PROFILE_KEY, MOMENTS_KEY, COVER_KEY, UI_KEY, API_KEY_STORE, PERSONAS_KEY, ACTIVE_PERSONA_KEY, MEMORY_KEY, CHATBG_KEY, STICKERS_KEY]
 const DB_NAME = 'ios-im'
 const STORE_NAME = 'kv'
 
@@ -285,6 +286,15 @@ export function saveChatBg(friendId: string, bg: ChatBg | null) {
   else delete cur[friendId]
   write(CHATBG_KEY, cur)
 }
+
+export function loadStickers(): Sticker[] {
+  return read<Sticker[]>(STICKERS_KEY, [])
+}
+
+export function saveStickers(list: Sticker[]) {
+  write(STICKERS_KEY, list)
+}
+
 
 function personaToProfile(p: Persona): Profile {
   return { name: p.name, avatar: p.avatar, gender: p.gender, age: p.age, bio: p.bio, wechatId: p.wechatId, region: p.region }

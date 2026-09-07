@@ -18,6 +18,7 @@ import ChatSettings from './pages/ChatSettings'
 import ChatSearch from './pages/ChatSearch'
 import ChatBackground from './pages/ChatBackground'
 import TranslateLang from './pages/TranslateLang'
+import StickerPage from './pages/StickerPage'
 import { ChatIcon, ContactsIcon, DiscoverIcon, MeIcon } from './components/icons'
 import { loadFriends, loadMessages, loadUiState, saveFriends, saveMessages, saveUiState } from './store'
 import type { Friend, Message } from './types'
@@ -40,6 +41,7 @@ type View =
   | { name: 'chatSearch'; friendId: string }
   | { name: 'chatBg'; friendId: string }
   | { name: 'translateLang'; friendId: string }
+  | { name: 'stickers' }
 
 const TABS: { key: Tab; label: string; icon: (active: boolean) => JSX.Element }[] = [
   { key: 'messages', label: '信息', icon: (a) => <ChatIcon active={a} /> },
@@ -56,6 +58,8 @@ function initialState(): { tab: Tab; view: View } {
   if (savedView && typeof savedView.name === 'string') {
     if (savedView.name === 'chat') {
       view = loadFriends().some((f) => f.id === savedView.friendId) ? savedView : { name: 'tabs' }
+    } else if (savedView.name === 'stickers') {
+      view = savedView
     } else if (
       ['moments', 'myProfile', 'settings', 'apiSetting', 'visionApi', 'voiceApi', 'memory', 'chatSettings', 'chatSearch', 'chatBg', 'translateLang'].includes(
         savedView.name
@@ -116,6 +120,7 @@ export default function App() {
         onEditFriend={() => setView({ name: 'addFriend', friendId: view.friendId })}
         onOpenSettings={() => setView({ name: 'apiSetting' })}
         onOpenChatSettings={() => setView({ name: 'chatSettings', friendId: view.friendId })}
+        onOpenStickers={() => setView({ name: 'stickers' })}
         jumpTo={view.jumpTo}
       />
     ) : (
@@ -208,6 +213,8 @@ export default function App() {
     content = <Moments onBack={backToTabs} />
   } else if (view.name === 'myProfile') {
     content = <MyProfile onBack={backToTabs} onEditPersona={(personaId) => setView({ name: 'addPersona', personaId })} onOpenMoments={() => setView({ name: 'moments' })} onOpenMemory={() => setView({ name: 'memory' })} />
+  } else if (view.name === 'stickers') {
+    content = <StickerPage onBack={() => setView({ name: 'tabs' })} />
   } else if (view.name === 'addPersona') {
     content = <AddPersona onBack={() => setView({ name: 'myProfile' })} personaId={view.personaId} />
   } else if (view.name === 'settings') {
@@ -252,7 +259,7 @@ export default function App() {
             />
           )}
           {tab === 'discover' && <Discover onOpenMoments={() => setView({ name: 'moments' })} />}
-          {tab === 'me' && <Me onOpenProfile={() => setView({ name: 'myProfile' })} onOpenSettings={() => setView({ name: 'settings' })} onOpenMoments={() => setView({ name: 'moments' })} onOpenMemory={() => setView({ name: 'memory' })} />}
+          {tab === 'me' && <Me onOpenProfile={() => setView({ name: 'myProfile' })} onOpenSettings={() => setView({ name: 'settings' })} onOpenMoments={() => setView({ name: 'moments' })} onOpenMemory={() => setView({ name: 'memory' })} onOpenStickers={() => setView({ name: 'stickers' })} />}
         </div>
         <nav className="tabbar">
           {TABS.map((t) => (

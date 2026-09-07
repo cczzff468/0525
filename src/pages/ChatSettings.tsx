@@ -211,6 +211,16 @@ export default function ChatSettings({
         </div>
 
         <div className="list-group">
+          <div className="row">
+            <div className="row-main">
+              <span className="row-title">表情包</span>
+              <span className="row-preview">开启后 AI 可以按意思发表情包，关闭后连 emoji 也不发</span>
+            </div>
+            <Switch on={cur.stickerEnabled !== false} onChange={(v) => patchFriend({ stickerEnabled: v })} />
+          </div>
+        </div>
+
+        <div className="list-group">
           <button className="row" onClick={() => setBurstOpen(true)}>
             <div className="row-main">
               <span className="row-title">多条信息发送</span>

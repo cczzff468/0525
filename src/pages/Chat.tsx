@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Friend, Message } from '../types'
-import { Avatar, Modal, formatTime, formatTimeFull } from '../components/common'
+import type { Friend, Message, Sticker } from '../types'
+import { Avatar, Modal, formatTimeFull } from '../components/common'
 import { BackIcon, SendIcon, PlusBadgeIcon, MicIcon } from '../components/icons'
-import { loadMessages, loadProfile, saveMessages, loadApiSetting, loadChatBgs, uid } from '../store'
+import { loadMessages, loadProfile, saveMessages, loadApiSetting, loadChatBgs, loadStickers, saveStickers, uid } from '../store'
 import { AiError, aiStream, chatUrl } from '../utils/ai'
 import { friendMemoryContext, maybeAutoSummarize } from '../utils/memory'
+import { fileToAvatar, fileToPhoto } from '../utils/image'
 
 interface MenuPos {
   x: number
@@ -62,12 +63,33 @@ function msgWidth(text: string): number {
   return text.length * 15 + 26
 }
 
+const STICKER_RE = /\[表情[:：]([^\[\]]{1,12})\]/g
+
+type StickerFrag = { t: 'text'; v: string } | { t: 'img'; url: string }
+
+function parseStickerText(text: string, custom: Sticker[]): StickerFrag[] {
+  const frags: StickerFrag[] = []
+  let last = 0
+  STICKER_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = STICKER_RE.exec(text))) {
+    if (m.index > last) frags.push({ t: 'text', v: text.slice(last, m.index) })
+    const name = m[1].trim()
+    const c = custom.find((s) => s.meaning === name) ?? custom.find((s) => s.meaning.includes(name) || name.includes(s.meaning))
+    if (c) frags.push({ t: 'img', url: c.url })
+    last = m.index + m[0].length
+  }
+  if (last < text.length) frags.push({ t: 'text', v: text.slice(last) })
+  return frags
+}
+
 export default function Chat({
   friend,
   onBack,
   onEditFriend,
   onOpenSettings,
   onOpenChatSettings,
+  onOpenStickers,
   jumpTo,
 }: {
   friend: Friend
@@ -75,6 +97,7 @@ export default function Chat({
   onEditFriend: () => void
   onOpenSettings: () => void
   onOpenChatSettings: () => void
+  onOpenStickers: () => void
   jumpTo?: string
 }) {
   const [messages, setMessages] = useState<Message[]>(() =>
@@ -93,6 +116,11 @@ export default function Chat({
   const [errModal, setErrModal] = useState<ErrModal | null>(null)
   const [listening, setListening] = useState(false)
   const [interim, setInterim] = useState('')
+  const [stickerOpen, setStickerOpen] = useState(false)
+  const [plusOpen, setPlusOpen] = useState(false)
+  const [myStickers, setMyStickers] = useState<Sticker[]>(() => loadStickers())
+  const [uploadQueue, setUploadQueue] = useState<string[]>([])
+  const [meaningDraft, setMeaningDraft] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<number>(0)
   const pressRef = useRef<number>(0)
@@ -122,7 +150,7 @@ export default function Chat({
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [messages, streaming, typing])
+  }, [messages, streaming, typing, stickerOpen])
 
   useEffect(
     () => () => {
@@ -370,6 +398,67 @@ export default function Chat({
     respond()
   }
 
+  const sendSticker = (payload: { meaning: string; url?: string; emoji?: string }) => {
+    if (busyRef.current || editMsg) return
+    commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'me', text: payload.meaning, time: Date.now(), sticker: payload }])
+    respond()
+  }
+
+  const sendImageMsg = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !file.type.startsWith('image/')) return
+    if (busyRef.current || editMsg) {
+      showHint('等对方说完再发图片哦')
+      return
+    }
+    try {
+      const url = await fileToPhoto(file)
+      commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'me', text: '[图片]', time: Date.now(), sticker: { meaning: '发了一张图片', url } }])
+      respond()
+    } catch {
+      showHint('图片读取失败，请换一张试试')
+    }
+  }
+
+  const saveStickerFromQueue = (meaning: string) => {
+    const url = uploadQueue[0]
+    if (!url) return
+    const item: Sticker = { id: uid(), meaning: meaning.trim() || '表情包', url, createdAt: Date.now() }
+    const next = [...myStickers, item]
+    saveStickers(next)
+    setMyStickers(next)
+    setUploadQueue((q) => q.slice(1))
+    setMeaningDraft('')
+    showHint('已保存到我的表情包')
+  }
+
+  const discardStickerFromQueue = () => {
+    setUploadQueue((q) => q.slice(1))
+    setMeaningDraft('')
+  }
+
+  const pickStickerFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith('image/')).slice(0, 12)
+    e.target.value = ''
+    if (files.length === 0) return
+    const urls: string[] = []
+    for (const f of files) {
+      try {
+        urls.push(await fileToAvatar(f))
+      } catch {
+        /* skip unreadable file */
+      }
+    }
+    if (urls.length === 0) {
+      showHint('图片读取失败，请换一张试试')
+      return
+    }
+    setStickerOpen(true)
+    setUploadQueue((q) => [...q, ...urls])
+    setMeaningDraft('')
+  }
+
   const startEdit = (m: Message) => {
     setReplyQuote(null)
     setMenuFor(null)
@@ -486,7 +575,6 @@ export default function Chat({
     openMsgMenu(m, (e.currentTarget as HTMLElement).getBoundingClientRect())
   }
 
-  const lastMine = [...messages].reverse().find((m) => m.from === 'me')
   const meProfile = loadProfile()
   const quoteBar = editMsg ?? replyQuote
 
@@ -573,54 +661,85 @@ export default function Chat({
                       <span className="chat-avatar-btn" onClick={onEditFriend} role="button" tabIndex={0}>
                         <Avatar name={friend.name} src={friend.avatar} size={34} />
                       </span>
-                      {friend.readStyle === 'avatar' && <span className="chat-meta">{readLabel}</span>}
                       {friend.timeStyle === 'avatar' && <span className="chat-meta">{fmtClock(m.time, withSec)}</span>}
-                    </span>
-                  ) : (
-                    <span className="chat-avatar-spacer" />
-                  )
-                ) : null}
-                {m.from === 'me' && avatarStyle !== 'none' && !selectMode ? (
-                  meAvShown ? (
-                    <span className="chat-avatar-col">
-                      <span className="chat-avatar-btn">
-                        <Avatar name={meProfile.name} src={meProfile.avatar} size={34} />
-                      </span>
                       {friend.readStyle === 'avatar' && <span className="chat-meta">{readLabel}</span>}
-                      {friend.timeStyle === 'avatar' && <span className="chat-meta">{fmtClock(m.time, withSec)}</span>}
                     </span>
                   ) : (
                     <span className="chat-avatar-spacer" />
                   )
                 ) : null}
                 <div className="chat-bubble-col">
-                  <div
-                    className={`bubble ${m.from === 'me' ? 'bubble-me' : 'bubble-friend'}`}
-                    onTouchStart={onTouchStart(m)}
-                    onTouchEnd={onTouchClear}
-                    onTouchMove={onTouchClear}
-                    onContextMenu={onContextMenu(m)}
-                    onClick={() => {
-                      if (selectMode) toggleSelect(m.id)
-                    }}
-                  >
-                    {m.quote && <div className="bubble-quote">{m.quote}</div>}
-                    {m.text}
-                    <svg
-                      className={`bubble-tail ${m.from === 'me' ? 'tail-me' : 'tail-them'}`}
-                      viewBox="0 0 10 19"
-                      width="10"
-                      height="19"
-                      aria-hidden="true"
+                  {m.sticker && !m.sticker.emoji && !m.quote ? (
+                    <div
+                      className="sticker-bare"
+                      onTouchStart={onTouchStart(m)}
+                      onTouchEnd={onTouchClear}
+                      onTouchMove={onTouchClear}
+                      onContextMenu={onContextMenu(m)}
+                      onClick={() => {
+                        if (selectMode) toggleSelect(m.id)
+                      }}
                     >
-                      <path d="M0 0 C0.6 8 3.6 14.6 10 19 C4.4 18.6 0 15.6 0 10 Z" />
-                    </svg>
-                  </div>
-                  {friend.timeStyle === 'bubble' && <span className="chat-meta under">{fmtClock(m.time, withSec)}</span>}
-                  {friend.readStyle === 'bubble' && (
+                      <img className="sticker-msg-img" src={m.sticker.url} alt={m.sticker.meaning} draggable={false} />
+                    </div>
+                  ) : (
+                    <div
+                      className={`bubble ${m.from === 'me' ? 'bubble-me' : 'bubble-friend'} ${m.sticker ? 'bubble-sticker' : ''}`}
+                      onTouchStart={onTouchStart(m)}
+                      onTouchEnd={onTouchClear}
+                      onTouchMove={onTouchClear}
+                      onContextMenu={onContextMenu(m)}
+                      onClick={() => {
+                        if (selectMode) toggleSelect(m.id)
+                      }}
+                    >
+                      {m.quote && <div className="bubble-quote">{m.quote}</div>}
+                      {m.sticker ? (
+                        m.sticker.emoji ? (
+                          <span className="sticker-emoji">{m.sticker.emoji}</span>
+                        ) : (
+                          <img className="sticker-msg-img" src={m.sticker.url} alt={m.sticker.meaning} draggable={false} />
+                        )
+                      ) : (
+                        parseStickerText(m.text, myStickers).map((f, i) =>
+                          f.t === 'text' ? (
+                            <span key={i}>{f.v}</span>
+                          ) : (
+                            <img key={i} className="sticker-inline big" src={f.url} alt="" draggable={false} />
+                          )
+                        )
+                      )}
+                      <svg
+                        className={`bubble-tail ${m.from === 'me' ? 'tail-me' : 'tail-them'}`}
+                        viewBox="0 0 10 19"
+                        width="10"
+                        height="19"
+                        aria-hidden="true"
+                      >
+                        <path d="M0 0 C0.6 8 3.6 14.6 10 19 C4.4 18.6 0 15.6 0 10 Z" />
+                      </svg>
+                    </div>
+                  )}
+                  {avatarStyle !== 'none' && friend.timeStyle === 'bubble' && (
+                    <span className="chat-meta under">{fmtClock(m.time, withSec)}</span>
+                  )}
+                  {avatarStyle !== 'none' && friend.readStyle === 'bubble' && (
                     <span className={`chat-meta under ${m.from === 'me' && !mineRead ? 'unread' : ''}`}>{readLabel}</span>
                   )}
                 </div>
+                {m.from === 'me' && avatarStyle !== 'none' && !selectMode ? (
+                  meAvShown ? (
+                    <span className="chat-avatar-col">
+                      <span className="chat-avatar-btn">
+                        <Avatar name={meProfile.name} src={meProfile.avatar} size={34} />
+                      </span>
+                      {friend.timeStyle === 'avatar' && <span className="chat-meta">{fmtClock(m.time, withSec)}</span>}
+                      {friend.readStyle === 'avatar' && <span className="chat-meta">{readLabel}</span>}
+                    </span>
+                  ) : (
+                    <span className="chat-avatar-spacer" />
+                  )
+                ) : null}
               </div>
               {m.from === 'friend' && transMap[m.id] && (
                 <div className="chat-row them tight">
@@ -654,14 +773,19 @@ export default function Chat({
               <Avatar name={friend.name} src={friend.avatar} size={34} />
             </span>
             <div className="bubble bubble-friend streaming">
-              {streaming}
+              {parseStickerText(streaming, myStickers).map((f, i) =>
+                f.t === 'text' ? (
+                  <span key={i}>{f.v}</span>
+                ) : (
+                  <img key={i} className="sticker-inline big" src={f.url} alt="" draggable={false} />
+                )
+              )}
               <svg className="bubble-tail tail-them" viewBox="0 0 10 19" width="10" height="19" aria-hidden="true">
                 <path d="M0 0 C0.6 8 3.6 14.6 10 19 C4.4 18.6 0 15.6 0 10 Z" />
               </svg>
             </div>
           </div>
         )}
-        {!selectMode && lastMine && <div className="chat-read">{formatTime(lastMine.time)}已读</div>}
         {messages.length === 0 && <div className="empty-hint chat-empty">和 {friend.name} 打个招呼吧</div>}
       </div>
 
@@ -706,7 +830,14 @@ export default function Chat({
             </div>
           )}
           <div className="chat-input-bar">
-            <button className="chat-plus" aria-label="更多">
+            <button
+              className={`chat-plus ${plusOpen ? 'on' : ''}`}
+              onClick={() => {
+                setPlusOpen((p) => !p)
+                setStickerOpen(false)
+              }}
+              aria-label="更多"
+            >
               <PlusBadgeIcon />
             </button>
             <div className="chat-input-wrap">
@@ -721,11 +852,6 @@ export default function Chat({
                   if (e.key === 'Enter') send()
                 }}
               />
-              {(draft.trim() || editMsg) && (
-                <button className="chat-send ready" onClick={send} aria-label={editMsg ? '保存' : '发送'}>
-                  <SendIcon size={15} />
-                </button>
-              )}
               {!draft.trim() && !editMsg && (
                 <button
                   className={`chat-mic ${listening ? 'listening' : ''}`}
@@ -735,8 +861,132 @@ export default function Chat({
                   <MicIcon />
                 </button>
               )}
+              <button
+                className={`chat-sticker-btn ${stickerOpen ? 'on' : ''}`}
+                onClick={() => {
+                  setStickerOpen((s) => !s)
+                  setPlusOpen(false)
+                }}
+                aria-label="表情"
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+                  <circle cx="8.8" cy="10" r="1.15" fill="currentColor" />
+                  <circle cx="15.2" cy="10" r="1.15" fill="currentColor" />
+                  <path d="M8 14.2c1 1.4 2.4 2.1 4 2.1s3-.7 4-2.1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              </button>
+              {(draft.trim() || editMsg) && (
+                <button className="chat-send ready" onClick={send} aria-label={editMsg ? '保存' : '发送'}>
+                  <SendIcon size={15} />
+                </button>
+              )}
             </div>
           </div>
+          {stickerOpen && (
+            <div className="sticker-panel">
+              <div className="sticker-grid">
+                {myStickers.length > 0 ? (
+                  <>
+                    {myStickers.map((s) => (
+                      <button key={s.id} className="sticker-cell sticker-cell-mine" onClick={() => sendSticker({ url: s.url, meaning: s.meaning })} title={s.meaning}>
+                        <img src={s.url} alt={s.meaning} draggable={false} loading="lazy" />
+                      </button>
+                    ))}
+                    <button className="sticker-cell sticker-add" onClick={() => document.getElementById('chat-sticker-file')?.click()} aria-label="上传表情包">
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 5v14M5 12h14" stroke="#c7c7cc" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </>
+                ) : (
+                  <div className="sticker-mine-empty">
+                        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10" stroke="#c7c7cc" strokeWidth="1.5" />
+                          <circle cx="9" cy="10" r="1.2" fill="#c7c7cc" />
+                          <circle cx="15" cy="10" r="1.2" fill="#c7c7cc" />
+                          <path d="M8.5 14.5c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8" stroke="#c7c7cc" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                        <div className="sticker-mine-empty-title">还没有表情包</div>
+                        <div className="sticker-mine-empty-sub">添加几张，聊天时点一下就能发</div>
+                        <div className="sticker-mine-empty-btns">
+                          <button className="sticker-mine-btn primary" onClick={() => document.getElementById('chat-sticker-file')?.click()}>
+                            上传图片
+                          </button>
+                          <button className="sticker-mine-btn ghost" onClick={onOpenStickers}>
+                            批量导入
+                          </button>
+                        </div>
+                      </div>
+                    )}
+              </div>
+              <input id="chat-sticker-file" type="file" accept="image/*" multiple hidden onChange={pickStickerFiles} />
+            </div>
+          )}
+          {plusOpen && (
+            <div className="sticker-panel plus-panel">
+              <div className="plus-grid">
+                <button className="plus-item" onClick={() => document.getElementById('chat-camera-file')?.click()}>
+                  <span className="plus-icon">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="6.5" width="18" height="13" rx="2.5" stroke="#7a7a80" strokeWidth="1.6" />
+                      <circle cx="12" cy="13" r="3.4" stroke="#7a7a80" strokeWidth="1.6" />
+                      <path d="M8.5 6.5 10 4h4l1.5 2.5" stroke="#7a7a80" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <span className="plus-label">相机</span>
+                </button>
+                <button className="plus-item" onClick={() => document.getElementById('chat-image-file')?.click()}>
+                  <span className="plus-icon">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" stroke="#7a7a80" strokeWidth="1.6" />
+                      <circle cx="9" cy="9.5" r="1.6" fill="#7a7a80" />
+                      <path d="M4.5 17.5 10 12l3.5 3.5 2.5-2.5 3.5 3.5" stroke="#7a7a80" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <span className="plus-label">图片</span>
+                </button>
+                <button className="plus-item" onClick={() => showHint('文字图片即将上线')}>
+                  <span className="plus-icon">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" stroke="#7a7a80" strokeWidth="1.6" />
+                      <path d="M8 9h8M12 9v7" stroke="#7a7a80" strokeWidth="1.6" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <span className="plus-label">文字图片</span>
+                </button>
+                <button className="plus-item" onClick={() => showHint('转账功能即将上线')}>
+                  <span className="plus-icon">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                      <rect x="3.5" y="5.5" width="17" height="13" rx="2.5" stroke="#7a7a80" strokeWidth="1.6" />
+                      <path d="M7.5 12h6m0 0-2.2-2.2M13.5 12l-2.2 2.2M16 9.2v5.6" stroke="#7a7a80" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <span className="plus-label">转账</span>
+                </button>
+                <button className="plus-item" onClick={() => showHint('红包功能即将上线')}>
+                  <span className="plus-icon">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                      <rect x="4.5" y="3.5" width="15" height="17" rx="2.5" stroke="#7a7a80" strokeWidth="1.6" />
+                      <path d="M4.8 6.5c4.6 3.4 9.8 3.4 14.4 0M12 10v3.2m-2.2-2 2.2 2 2.2-2" stroke="#7a7a80" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <span className="plus-label">红包</span>
+                </button>
+                <button className="plus-item" onClick={() => showHint('位置功能即将上线')}>
+                  <span className="plus-icon">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 21c4.2-4.2 6.5-7.4 6.5-10.5a6.5 6.5 0 1 0-13 0C5.5 13.6 7.8 16.8 12 21Z" stroke="#7a7a80" strokeWidth="1.6" strokeLinejoin="round" />
+                      <circle cx="12" cy="10.5" r="2.4" stroke="#7a7a80" strokeWidth="1.6" />
+                    </svg>
+                  </span>
+                  <span className="plus-label">位置</span>
+                </button>
+              </div>
+              <input id="chat-image-file" type="file" accept="image/*" hidden onChange={sendImageMsg} />
+              <input id="chat-camera-file" type="file" accept="image/*" capture="environment" hidden onChange={sendImageMsg} />
+            </div>
+          )}
         </>
       )}
 
@@ -799,6 +1049,31 @@ export default function Chat({
           </div>
         </>
       )}
+
+      <Modal
+        open={uploadQueue.length > 0}
+        title="这个表情包表达什么意思？"
+        buttons={[
+          { label: '不保存', onClick: discardStickerFromQueue },
+          { label: '保存', primary: true, onClick: () => saveStickerFromQueue(meaningDraft) },
+        ]}
+      >
+        <div className="sticker-upload-preview">
+          <img src={uploadQueue[0]} alt="表情包预览" />
+        </div>
+        <input
+          className="remark-input"
+          type="text"
+          placeholder="如：开心到飞起（AI 会按意思发表）"
+          maxLength={12}
+          value={meaningDraft}
+          onChange={(e) => setMeaningDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveStickerFromQueue(meaningDraft)
+          }}
+          autoFocus
+        />
+      </Modal>
 
       <Modal
         open={errModal !== null}

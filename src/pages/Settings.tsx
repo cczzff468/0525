@@ -45,7 +45,7 @@ export default function Settings({
             </div>
             <div className="row-main">
               <span className="row-title">API设置</span>
-              <span className="row-preview">{cfg.apiKey ? `模型：${cfg.model}` : '未配置 Key，聊天将使用本地模拟回复'}</span>
+              <span className="row-preview">{cfg.apiKey ? `模型：${cfg.model}` : '没有配置'}</span>
             </div>
             <Chevron />
           </button>

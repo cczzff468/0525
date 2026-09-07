@@ -19,7 +19,15 @@ export interface Friend {
   timeStyle?: 'off' | 'avatar' | 'bubble'
   timeFormat?: 'hm' | 'hms'
   readStyle?: 'off' | 'avatar' | 'bubble'
+  stickerEnabled?: boolean
   prompt?: string
+  createdAt: number
+}
+
+export interface Sticker {
+  id: string
+  meaning: string
+  url: string
   createdAt: number
 }
 
@@ -35,6 +43,7 @@ export interface Message {
   text: string
   time: number
   quote?: string
+  sticker?: { meaning: string; url?: string; emoji?: string }
 }
 
 export interface Profile {

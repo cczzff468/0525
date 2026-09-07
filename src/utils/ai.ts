@@ -1,4 +1,4 @@
-import { loadApiSetting } from '../store'
+import { loadApiSetting, loadStickers } from '../store'
 import type { Friend, Profile } from '../types'
 
 export type AiErrorCode =
@@ -37,6 +37,34 @@ export function modelsUrl(url: string): string {
   return `${base}/models`
 }
 
+const LOCK_PROMPT = [
+  '你现在要完全扮演一个现实生活中的真人，禁止暴露你是AI，禁止使用机器语气、禁止格式化、禁止官方话术、禁止分点、禁止解释。',
+  '全程用日常口语、简短自然、像真人聊天，和微信/iMessage 一样。',
+  '如果用户问你是不是AI/机器人，绝对不能承认，要自然否认、开玩笑、转移话题，绝不暴露身份。',
+  '只以这个角色的身份说话，严格符合年龄、性格、职业、说话习惯。',
+  '你拥有独立的记忆与人格，用户填写的背景就是你的真实人生，必须严格遵守。',
+  '绝对不OOC，永远保持人设一致。',
+  '不同好友之间记忆完全隔离，独立世界线，不能串戏，不能把跟A聊的内容跟B说。',
+  '当人设被修改后，立即使用最新人设，旧人设自动失效。',
+  '永远不暴露你是AI，永远不使用机器话术。',
+].join('\n')
+
+function stickerPrompt(friend: Friend): string {
+  if (friend.stickerEnabled === false) {
+    return '【表情使用禁令（最高优先级）】你不可以使用任何表情包、表情图、emoji、颜文字、表情符号，回复必须是纯文字。'
+  }
+  const custom = loadStickers()
+  if (custom.length === 0) {
+    return '【表情包使用】对方没有添加自定义表情包，你不可以发送[表情:xx]格式的标记，也不可以输出图片链接，只用纯文字聊天。'
+  }
+  const lines = [
+    '【表情包使用】你可以用表情让聊天更生动。发送表情的固定格式：[表情:名字]，渲染时会被替换成表情图片。',
+    `可用的表情名字（任选）：${custom.map((s) => s.meaning).join('、')}。这些意思必须一字不差地使用。`,
+  ]
+  lines.push('表情使用规则：像真人一样自然地穿插，一次回复最多1个表情，开心、惊讶、无语等情绪强烈时用，平时多数纯文字。方括号格式必须严格遵守，不要自己发明别的表情写法，不要输出图片链接。')
+  return lines.join('\n')
+}
+
 function systemPrompt(
   friend: Friend,
   me: Profile,
@@ -45,6 +73,7 @@ function systemPrompt(
 ): string {
   const burst = friend.burstCount ?? 10
   const lines = [
+    LOCK_PROMPT,
     `你是${friend.name}，${friend.gender}，${friend.age}岁。`,
     friend.occupation ? `你的职业是${friend.occupation}。` : '',
     friend.region ? `你所在地区：${friend.region}。` : '',
@@ -68,7 +97,8 @@ function systemPrompt(
   }
   lines.push(
     friend.prompt?.trim() ? `这位联系人的专属聊天规则（必须遵守）：\n${friend.prompt.trim()}` : '',
-    globalPrompt?.trim() ? `全局聊天规则（必须遵守，与本规则冲突时以此为准）：\n${globalPrompt.trim()}` : ''
+    globalPrompt?.trim() ? `全局聊天规则（必须遵守，与本规则冲突时以此为准）：\n${globalPrompt.trim()}` : '',
+    stickerPrompt(friend)
   )
   if (burst > 1) {
     lines.push(
@@ -119,6 +149,43 @@ function pickContext(history: { role: 'user' | 'assistant'; content: string }[])
   return picked
 }
 
+export async function describeStickerImage(url: string): Promise<string> {
+  const cfg = loadApiSetting()
+  const v = cfg.vision
+  if (!v.baseUrl.trim() || !v.model.trim()) throw new AiError('noapi')
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (v.apiKey.trim()) headers.Authorization = `Bearer ${v.apiKey.trim()}`
+  const res = await fetch(chatUrl(v.baseUrl), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: v.model.trim(),
+      messages: [
+        {
+          role: 'system',
+          content:
+            '你是表情包描述助手。用户给你一张表情包图片，你用一个短语概括它表达的意思或情绪，不超过10个字，例如：开心大笑、无语汗颜、猫猫瞪眼。只输出这个短语，不要任何其他内容。',
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url } },
+            { type: 'text', text: '这张表情包表达什么意思？' },
+          ],
+        },
+      ],
+      max_tokens: 30,
+      temperature: 0.3,
+    }),
+  })
+  if (!res.ok) throw errorFromStatus(res.status, await readServerError(res))
+  const data = await res.json()
+  const text: string = data?.choices?.[0]?.message?.content ?? ''
+  const clean = text.replace(/["'\[\]表情：:。]/g, '').trim().slice(0, 12)
+  if (!clean) throw new AiError('other', '识别不出这张图的意思')
+  return clean
+}
+
 export async function aiStream(
   history: { role: 'user' | 'assistant'; content: string }[],
   friend: Friend,
@@ -146,7 +213,11 @@ export async function aiStream(
   }
   const timeoutMs = Math.max(5, cfg.timeout) * 1000
   const controller = new AbortController()
-  const abortTimer = window.setTimeout(() => controller.abort(), timeoutMs)
+  let abortTimer = window.setTimeout(() => controller.abort(), timeoutMs)
+  const resetAbortTimer = () => {
+    window.clearTimeout(abortTimer)
+    abortTimer = window.setTimeout(() => controller.abort(), timeoutMs)
+  }
 
   let full = ''
   try {
@@ -167,6 +238,7 @@ export async function aiStream(
     while (!done) {
       const { value, done: rdDone } = await reader.read()
       if (rdDone) break
+      resetAbortTimer()
       buf += decoder.decode(value, { stream: true })
       const events = buf.split('\n\n')
       buf = events.pop() ?? ''
