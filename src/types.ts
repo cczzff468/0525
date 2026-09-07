@@ -9,6 +9,7 @@ export interface Friend {
   region: string
   occupation: string
   pinned?: boolean
+  prompt?: string
   createdAt: number
 }
 
@@ -117,4 +118,5 @@ export interface ApiSetting {
   myPreset?: ApiPreset | null
   vision: VisionSetting
   voice: VoiceSetting
+  globalPrompt?: string
 }

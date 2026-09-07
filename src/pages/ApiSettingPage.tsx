@@ -370,6 +370,23 @@ export default function ApiSettingPage({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
+        <div className="section-label">AI 聊天规则</div>
+        <div className="list-group">
+          <div className="form-row form-row-col">
+            <label className="form-label" htmlFor="g-prompt">全局提示词（可选，对所有 AI 好友生效）</label>
+            <textarea
+              id="g-prompt"
+              className="form-textarea"
+              placeholder={'所有好友聊天都要遵守的规则，如：\n· 回复像真人发微信，不要长篇大论\n· 可以用"哈哈""嗯嗯"这类口语\n· 不要每次都反问对方\n· 聊天里可以适当发表情包文字描述'}
+              maxLength={800}
+              rows={5}
+              value={cfg.globalPrompt ?? ''}
+              onChange={(e) => update({ globalPrompt: e.target.value })}
+            />
+            <span className="form-preview">自动保存。好友资料里还可以给单个好友设置专属规则，两者会同时生效，全局规则优先</span>
+          </div>
+        </div>
+
         <button className="primary-btn" onClick={testConnection} disabled={testing}>
           {testing ? '测试中…' : '测试连接'}
         </button>

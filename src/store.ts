@@ -230,6 +230,7 @@ export function loadApiSetting(): ApiSetting {
       configs: Array.isArray(voice.configs) && voice.configs.length > 0 ? voice.configs : DEFAULT_VOICE_CONFIGS,
       selectedId: voice.selectedId || (voice as any).defaultId || 'vc-minimax',
     },
+    globalPrompt: s.globalPrompt || '',
   }
 }
 

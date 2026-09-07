@@ -24,6 +24,7 @@ export default function AddFriend({
   const [region, setRegion] = useState(editing?.region ?? '')
   const [occupation, setOccupation] = useState(editing?.occupation ?? '')
   const [bio, setBio] = useState(editing?.bio ?? '')
+  const [prompt, setPrompt] = useState(editing?.prompt ?? '')
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -64,6 +65,7 @@ export default function AddFriend({
         gender,
         age: ageNum,
         bio: bio.trim(),
+        prompt: prompt.trim(),
         avatar,
         wechatId: wechatId.trim() || editing.wechatId,
         region: region.trim(),
@@ -79,6 +81,7 @@ export default function AddFriend({
       gender,
       age: ageNum,
       bio: bio.trim(),
+      prompt: prompt.trim(),
       avatar,
       wechatId: wechatId.trim() || genWechatId(),
       region: region.trim(),
@@ -218,6 +221,19 @@ export default function AddFriend({
               value={bio}
               onChange={(e) => setBio(e.target.value)}
             />
+          </div>
+          <div className="form-row form-row-col">
+            <label className="form-label" htmlFor="f-prompt">聊天提示词规则（可选）</label>
+            <textarea
+              id="f-prompt"
+              className="form-textarea"
+              placeholder={'给 TA 定制的聊天规则，如：\n· 说话简短，多用语气词\n· 偶尔发一句方言\n· 记住我们上次聊的话题\n· 不主动问我要照片'}
+              maxLength={500}
+              rows={4}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+            />
+            <span className="form-preview">只对这位好友生效，和 TA 聊天时作为硬性规则发给 AI</span>
           </div>
         </div>
 

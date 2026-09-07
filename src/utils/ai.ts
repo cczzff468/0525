@@ -37,7 +37,7 @@ export function modelsUrl(url: string): string {
   return `${base}/models`
 }
 
-function systemPrompt(friend: Friend, me: Profile): string {
+function systemPrompt(friend: Friend, me: Profile, globalPrompt?: string): string {
   const lines = [
     `你是${friend.name}，${friend.gender}，${friend.age}岁。`,
     friend.occupation ? `你的职业是${friend.occupation}。` : '',
@@ -46,6 +46,8 @@ function systemPrompt(friend: Friend, me: Profile): string {
     `你正在和${me.name}（${me.gender}，${me.age > 0 ? `${me.age}岁` : '年龄未知'}）用手机聊天。`,
     me.bio ? `对方的人设与背景：${me.bio}。聊天时可以把对方当作这个人来对待，可以自然地提起对方的爱好。` : '',
     '用简体中文回复，口语化，像真人发消息，每次1-2句话，符合你的人设语气，不要出现"作为AI"之类的表述。',
+    friend.prompt?.trim() ? `这位联系人的专属聊天规则（必须遵守）：\n${friend.prompt.trim()}` : '',
+    globalPrompt?.trim() ? `全局聊天规则（必须遵守，与本规则冲突时以此为准）：\n${globalPrompt.trim()}` : '',
   ]
   return lines.filter(Boolean).join('\n')
 }
@@ -91,7 +93,7 @@ export async function aiStream(
     temperature: cfg.temperature,
     max_tokens: cfg.maxTokens,
     messages: [
-      { role: 'system', content: systemPrompt(friend, me) },
+      { role: 'system', content: systemPrompt(friend, me, cfg.globalPrompt) },
       ...history.slice(-20),
     ],
   }
