@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavBar, Avatar } from '../../components/common'
 import { BackIcon } from '../../components/icons'
-import { addBill, loadFriends, loadMessages, loadProfile, patchFriendMsg, updateWallet } from '../../store'
+import { addBill, appendMessage, loadFriends, loadMessages, loadProfile, patchFriendMsg, uid, updateWallet } from '../../store'
 import type { RelativeCard } from '../../types'
 import { formatMoney } from '../../utils/qr'
 
@@ -27,10 +27,12 @@ export function RedPacketDetail({ friendId, msgId, onBack }: { friendId: string;
   const senderName = msg.from === 'me' ? me.name : friend?.name ?? '好友'
   const senderAvatar = msg.from === 'me' ? me.avatar : friend?.avatar
   const received = rp.status === '已领取'
+  const refunded = rp.status === '已退还'
   const openerName = rp.openedBy === '我' ? me.name : rp.openedBy ?? ''
 
   let heroState: string
-  if (received && msg.from === 'me') heroState = `${openerName}领取了你的红包`
+  if (refunded) heroState = msg.from === 'me' ? '对方已退还，金额已退回零钱' : '你已退还该红包'
+  else if (received && msg.from === 'me') heroState = `${openerName}领取了你的红包`
   else if (received) heroState = '已领取，金额已存入零钱'
   else if (msg.from === 'me') heroState = '等待对方领取'
   else heroState = '等待你领取'
@@ -80,6 +82,8 @@ export function RedPacketDetail({ friendId, msgId, onBack }: { friendId: string;
                 <span className="wd-rp-record-amt">{formatMoney(rp.amount)}元</span>
               </div>
             </>
+          ) : refunded ? (
+            <div className="wd-rp-wait-tip">该红包已退还，如需要可重新发给对方</div>
           ) : (
             <div className="wd-rp-wait-tip">未领取的红包，将于 24 小时后发起退款</div>
           )}
@@ -106,13 +110,25 @@ export function TransferDetail({ friendId, msgId, onBack, onOpenBills }: { frien
   const t = msg.transfer
   const waiting = t.status === '待收款' && msg.from === 'friend'
   const received = t.status === '已收款'
+  const refunded = t.status === '已退还'
 
   const confirm = () => {
     if (!waiting) return
     updateWallet((x) => ({ ...x, balance: Math.round((x.balance + t.amount) * 100) / 100 }))
     addBill({ kind: '转账', title: `${loadFriends().find((f) => f.id === friendId)?.name ?? '好友'}的转账`, amount: t.amount, status: '已存入零钱', friendName: loadFriends().find((f) => f.id === friendId)?.name, note: t.note })
     patchFriendMsg(friendId, msgId, { transfer: { ...t, status: '已收款', confirmedAt: Date.now() } })
+    const recv = { id: uid(), friendId, from: 'me' as const, text: '', time: Date.now(), receipt: { kind: 'transfer' as const, amount: t.amount, srcMsgId: msgId } }
+    appendMessage(recv)
     setHint(`已收钱 ¥${formatMoney(t.amount)}`)
+    window.setTimeout(() => setHint(''), 1600)
+    setTick((x) => x + 1)
+  }
+
+  const refund = () => {
+    if (!waiting) return
+    patchFriendMsg(friendId, msgId, { transfer: { ...t, status: '已退还' } })
+    appendMessage({ id: uid(), friendId, from: 'me', text: `已将转账退还给${loadFriends().find((f) => f.id === friendId)?.name ?? '对方'}`, time: Date.now() })
+    setHint('已退还')
     window.setTimeout(() => setHint(''), 1600)
     setTick((x) => x + 1)
   }
@@ -134,10 +150,16 @@ export function TransferDetail({ friendId, msgId, onBack, onOpenBills }: { frien
       />
       <div className="page-body wd-body">
         <div className="wd-tf-status">
-          <span className={`wd-tf-icon ${received ? 'done' : ''}`}>
+          <span className={`wd-tf-icon ${received ? 'done' : refunded ? 'refund' : ''}`}>
             {received ? (
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
                 <path d="m6 12.5 4 4 8-9" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : refunded ? (
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+                <path d="M6 9h9a4 4 0 0 1 0 8H7" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+                <path d="m9 6.5 -3 2.5 3 2.5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" transform="translate(0 2)" />
+                <path d="m8.5 11.5 -3 2.5 3 2.5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             ) : (
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
@@ -146,15 +168,17 @@ export function TransferDetail({ friendId, msgId, onBack, onOpenBills }: { frien
               </svg>
             )}
           </span>
-          <span className="wd-tf-state">{t.status === '已收款' ? '已收款' : t.status === '已退还' ? '已退还' : '待收款'}</span>
+          <span className="wd-tf-state">{received ? '已收款' : refunded ? '已退还' : '待收款'}</span>
           <span className="wd-tf-amount">¥{formatMoney(t.amount)}</span>
           <span className="wd-tf-note">
             {waiting ? (
               <>
-                1天内对方未收款，将退还给你。<em>提醒对方收款</em>
+                1天内未收款，将自动退还给你。
               </>
             ) : received ? (
               '已存入零钱，可在账单中查看'
+            ) : refunded ? (
+              msg.from === 'me' ? '对方已退还，金额已退回零钱' : '已退还给对方'
             ) : (
               t.note
             )}
@@ -178,9 +202,14 @@ export function TransferDetail({ friendId, msgId, onBack, onOpenBills }: { frien
           )}
         </div>
         {waiting && (
-          <button className="btn-green-big wd-confirm-btn" onClick={confirm}>
-            确认收款
-          </button>
+          <div className="wd-tf-btns">
+            <button className="btn-green-big wd-confirm-btn" onClick={confirm}>
+              确认收款
+            </button>
+            <button className="wd-refund-btn" onClick={refund}>
+              退还
+            </button>
+          </div>
         )}
         <button className="wd-bill-link" onClick={onOpenBills}>
           账单详情
@@ -203,7 +232,7 @@ export function RelativeCardDetail({ card, onBack }: { card: RelativeCard; onBac
             <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
           </svg>
         </div>
-        <div className="wd-rc-subject">给 {card.friendName} 的亲属卡</div>
+        <div className="wd-rc-subject">{card.direction === 'received' ? `来自 ${card.friendName} 的亲属卡` : `给 ${card.friendName} 的亲属卡`}</div>
         <div className="wd-rc-amount">
           <span className="wd-rc-amount-label">每月可用额度</span>
           <span className="wd-rc-amount-value">¥{formatMoney(card.monthlyLimit)}</span>
@@ -219,11 +248,23 @@ export function RelativeCardDetail({ card, onBack }: { card: RelativeCard; onBac
         <div className="wd-info-rows">
           <div className="wd-info-row">
             <span className="wd-info-label">当前状态</span>
-            <span className={`wd-info-value ${card.status === 'claimed' ? '' : 'wd-info-warn'}`}>{card.status === 'claimed' ? '对方已领取' : '待对方领取'}</span>
+            <span className={`wd-info-value ${card.status === 'claimed' ? '' : 'wd-info-warn'}`}>
+              {card.direction === 'received'
+                ? card.status === 'claimed'
+                  ? '已领取，可使用'
+                  : card.status === 'rejected'
+                    ? '已退还'
+                    : '待领取'
+                : card.status === 'claimed'
+                  ? '对方已领取'
+                  : card.status === 'rejected'
+                    ? '对方已退还'
+                    : '待对方领取'}
+            </span>
           </div>
           <div className="wd-info-row">
             <span className="wd-info-label">扣款方式</span>
-            <span className="wd-info-value">零钱</span>
+            <span className="wd-info-value">{card.direction === 'received' ? '由对方代付' : '零钱'}</span>
           </div>
           <div className="wd-info-row">
             <span className="wd-info-label">创建时间</span>
@@ -233,6 +274,12 @@ export function RelativeCardDetail({ card, onBack }: { card: RelativeCard; onBac
             <div className="wd-info-row">
               <span className="wd-info-label">领取时间</span>
               <span className="wd-info-value">{fmtFull(card.claimedAt)}</span>
+            </div>
+          )}
+          {card.status === 'rejected' && card.rejectedAt && (
+            <div className="wd-info-row">
+              <span className="wd-info-label">退还时间</span>
+              <span className="wd-info-value">{fmtFull(card.rejectedAt)}</span>
             </div>
           )}
         </div>

@@ -161,33 +161,47 @@ export default function App() {
       const friend = loadFriends().find((f) => f.id === friendId)
       const msg = loadMessages().find((m) => m.id === msgId)
       if (!friend || !msg) return
-      let done = false
-      let amount = 0
-      let receiptText = ''
-      let cardId: string | undefined
+      const claim = Math.random() < 0.6
       if (kind === 'redpacket' && msg.redpacket) {
-        patchFriendMsg(friendId, msgId, { redpacket: { ...msg.redpacket, status: '已领取', openedBy: friend.name, openedAt: Date.now() } })
-        amount = msg.redpacket.amount
-        receiptText = `领取了你的红包，收到 ¥${amount} 元`
-        done = true
+        if (claim) {
+          patchFriendMsg(friendId, msgId, { redpacket: { ...msg.redpacket, status: '已领取', openedBy: friend.name, openedAt: Date.now() } })
+          appendMessage({ id: uid(), friendId, from: 'friend', text: `领取了你的红包，收到 ¥${msg.redpacket.amount} 元`, time: Date.now(), receipt: { kind: 'redpacket', amount: msg.redpacket.amount, srcMsgId: msgId } })
+        } else {
+          patchFriendMsg(friendId, msgId, { redpacket: { ...msg.redpacket, status: '已退还' } })
+          const amt = msg.redpacket.amount
+          updateWallet((x) => ({ ...x, balance: Math.round((x.balance + amt) * 100) / 100 }))
+          addBill({ kind: '红包', title: `${friend.name}退还的红包`, amount: amt, status: '已退还，退回零钱', friendName: friend.name, note: msg.redpacket.blessing })
+          appendMessage({ id: uid(), friendId, from: 'friend', text: `退还了你的红包，¥${amt} 已退回你的零钱`, time: Date.now() })
+        }
+        friend.lastTime = Date.now()
+        saveFriends(loadFriends().map((f) => (f.id === friendId ? friend : f)))
+        refreshData()
       } else if (kind === 'transfer' && msg.transfer) {
-        patchFriendMsg(friendId, msgId, { transfer: { ...msg.transfer, status: '已收款', confirmedAt: Date.now() } })
-        amount = msg.transfer.amount
-        receiptText = `已收款，到账 ¥${amount} 元`
-        done = true
+        if (claim) {
+          patchFriendMsg(friendId, msgId, { transfer: { ...msg.transfer, status: '已收款', confirmedAt: Date.now() } })
+          appendMessage({ id: uid(), friendId, from: 'friend', text: `已收款，到账 ¥${msg.transfer.amount} 元`, time: Date.now(), receipt: { kind: 'transfer', amount: msg.transfer.amount, srcMsgId: msgId } })
+        } else {
+          patchFriendMsg(friendId, msgId, { transfer: { ...msg.transfer, status: '已退还' } })
+          const amt = msg.transfer.amount
+          updateWallet((x) => ({ ...x, balance: Math.round((x.balance + amt) * 100) / 100 }))
+          addBill({ kind: '转账', title: `${friend.name}退还的转账`, amount: amt, status: '已退还，退回零钱', friendName: friend.name, note: msg.transfer.note })
+          appendMessage({ id: uid(), friendId, from: 'friend', text: `退还了你的转账，¥${amt} 已退回你的零钱`, time: Date.now() })
+        }
+        friend.lastTime = Date.now()
+        saveFriends(loadFriends().map((f) => (f.id === friendId ? friend : f)))
+        refreshData()
       } else if (kind === 'rc' && msg.relativeCard) {
         const card = loadWallet().relativeCards.find((c) => c.id === msg.relativeCard!.cardId)
-        if (card) {
+        if (!card) return
+        if (claim) {
           updateWallet((x) => ({ ...x, relativeCards: x.relativeCards.map((c2) => (c2.id === card.id ? { ...c2, status: 'claimed', claimedAt: Date.now() } : c2)) }))
           patchFriendMsg(friendId, msgId, { relativeCard: { cardId: card.id, status: '已领取' } })
-          amount = card.monthlyLimit
-          cardId = card.id
-          receiptText = `已领取你的亲属卡，每月额度 ¥${amount} 元`
-          done = true
+          appendMessage({ id: uid(), friendId, from: 'friend', text: `已领取你的亲属卡，每月额度 ¥${card.monthlyLimit} 元`, time: Date.now(), receipt: { kind: 'rc', amount: card.monthlyLimit, srcMsgId: msgId, cardId: card.id } })
+        } else {
+          updateWallet((x) => ({ ...x, relativeCards: x.relativeCards.map((c2) => (c2.id === card.id ? { ...c2, status: 'rejected', rejectedAt: Date.now() } : c2)) }))
+          patchFriendMsg(friendId, msgId, { relativeCard: { cardId: card.id, status: '已退还' } })
+          appendMessage({ id: uid(), friendId, from: 'friend', text: `婉拒了你的亲属卡，卡已退回给你`, time: Date.now() })
         }
-      }
-      if (done) {
-        appendMessage({ id: uid(), friendId, from: 'friend', text: receiptText, time: Date.now(), receipt: { kind, amount, srcMsgId: msgId, ...(cardId ? { cardId } : {}) } })
         friend.lastTime = Date.now()
         saveFriends(loadFriends().map((f) => (f.id === friendId ? friend : f)))
         refreshData()
@@ -305,14 +319,36 @@ export default function App() {
     const w = loadWallet()
     const card = w.relativeCards.find((c) => c.id === cardId)
     if (!card) return '亲属卡不存在'
+    if (card.status === 'rejected') return '该亲属卡已退还，无法使用'
+    if (card.direction === 'received' && card.status !== 'claimed') return '请先领用该亲属卡'
     const n = Math.round(amount * 100) / 100
     if (!n || n <= 0) return '请输入正确的金额'
     const rest = Math.round((card.monthlyLimit - card.used) * 100) / 100
     if (n > rest) return '超过本卡当月剩余额度'
-    const a = checkAmount(w, payId, n)
-    if (a) return a
     const v = verifyPwd(pwd)
     if (v) return v
+    if (card.direction === 'received') {
+      updateWallet((x) => ({
+        ...x,
+        relativeCards: x.relativeCards.map((c) => (c.id === cardId ? { ...c, used: Math.round((c.used + n) * 100) / 100 } : c)),
+      }))
+      addBill({ kind: '亲属卡', title: `${card.friendName} 的亲属卡消费`, amount: 0, status: `由${card.friendName}代付`, friendName: card.friendName, note: note.trim() || '亲属卡消费' })
+      setView({
+        name: 'paySuccess',
+        data: {
+          title: '支付成功',
+          amount: n,
+          rows: [
+            { label: '消费项目', value: `${card.friendName} 的亲属卡` },
+            { label: '代付人', value: card.friendName },
+          ],
+          back: { name: 'relativeCard' },
+        },
+      })
+      return null
+    }
+    const a = checkAmount(w, payId, n)
+    if (a) return a
     const label = payLabel(w, payId)
     updateWallet((x) => ({
       ...deduct(x, payId, n),
@@ -457,7 +493,7 @@ export default function App() {
   } else if (view.name === 'paySuccess') {
     content = <PaySuccess data={view.data} onDone={() => setView(view.data.back)} />
   } else if (view.name === 'rpDetail') {
-    const rpMsg = messages.find((m) => m.id === view.msgId && m.friendId === view.friendId)
+    const rpMsg = loadMessages().find((m) => m.id === view.msgId && m.friendId === view.friendId)
     content = rpMsg ? (
       <RedPacketDetail friendId={view.friendId} msgId={view.msgId} onBack={() => setView({ name: 'chat', friendId: view.friendId })} />
     ) : (
@@ -466,7 +502,7 @@ export default function App() {
       </div>
     )
   } else if (view.name === 'tfDetail') {
-    const tfMsg = messages.find((m) => m.id === view.msgId && m.friendId === view.friendId)
+    const tfMsg = loadMessages().find((m) => m.id === view.msgId && m.friendId === view.friendId)
     content = tfMsg ? (
       <TransferDetail
         friendId={view.friendId}

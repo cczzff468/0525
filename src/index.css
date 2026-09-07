@@ -5821,6 +5821,186 @@ button:disabled {
   font-weight: 600;
   cursor: pointer;
 }
+.rp-cover-refund {
+  position: relative;
+  z-index: 1;
+  margin-top: 30px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+/* 转账收款：微信现网浅色卡片风 */
+.tf-claim-overlay {
+  background: #fff;
+}
+.tf-claim {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+}
+.tf-claim-head {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 10vh;
+}
+.tf-claim-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tf-claim-from {
+  margin-top: 16px;
+  font-size: 16px;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+.tf-claim-amount {
+  margin-top: 10px;
+  font-size: 52px;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: 0.5px;
+  line-height: 1.1;
+}
+.tf-claim-amount small {
+  font-size: 28px;
+  font-weight: 600;
+}
+.tf-claim-note {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #8a8a8e;
+}
+.tf-claim-tip {
+  margin-top: 22px;
+  font-size: 12px;
+  color: #a6a6ab;
+}
+.tf-claim-actions {
+  width: min(86vw, 336px);
+  margin-top: auto;
+  margin-bottom: calc(36px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.tf-claim-ok {
+  width: 100%;
+  height: 48px;
+  border: none;
+  border-radius: 10px;
+  background: #07c160;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tf-claim-refund {
+  margin-top: 10px;
+  border: none;
+  background: none;
+  color: #9aa0a8;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+/* 亲属卡领取 */
+.rc-claim,
+.rc-claimed {
+  width: 300px;
+  background: #fff;
+  border-radius: 18px;
+  padding: 34px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 14px 46px rgba(0, 0, 0, 0.3);
+}
+.rc-claim-heart {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ffb3b8, #ff6f7a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rc-claimed-heart {
+  background: linear-gradient(180deg, #b7a1ff, #8a6bff);
+}
+.rc-claim-name,
+.rc-claimed-name {
+  margin-top: 18px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-align: center;
+}
+.rc-claim-limit,
+.rc-claimed-limit {
+  margin-top: 10px;
+  font-size: 26px;
+  font-weight: 700;
+  color: #e5533d;
+}
+.rc-claim-desc,
+.rc-claimed-tip {
+  margin-top: 14px;
+  font-size: 12px;
+  color: #9a9a9f;
+  line-height: 1.7;
+  text-align: center;
+}
+.rc-claimed-title {
+  margin-top: 16px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+.rc-claim-btns {
+  width: 100%;
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.rc-btn-primary {
+  width: 100%;
+  height: 46px;
+  border: none;
+  border-radius: 8px;
+  background: #fa5151;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rc-btn-ghost {
+  border: none;
+  background: none;
+  color: #9aa0a8;
+  font-size: 14px;
+  padding: 8px 0;
+  cursor: pointer;
+}
 
 /* 转账 */
 .transfer-page {
@@ -6853,6 +7033,27 @@ button:disabled {
 
 .wd-tf-icon.done {
   background: linear-gradient(135deg, #ff7a59, #e5533d);
+}
+
+.wd-tf-icon.refund {
+  background: linear-gradient(135deg, #ffc257, #ff9432);
+}
+
+.wd-tf-btns {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wd-refund-btn {
+  margin-top: 10px;
+  border: none;
+  background: none;
+  color: #9a9aa0;
+  font-size: 15px;
+  padding: 8px 14px;
+  cursor: pointer;
 }
 
 .wd-tf-state {

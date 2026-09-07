@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Friend, Message, Sticker } from '../types'
+import type { Friend, Message, RelativeCard, Sticker } from '../types'
 import { Avatar, Modal, formatTimeFull } from '../components/common'
 import { BackIcon, SendIcon, PlusBadgeIcon, MicIcon } from '../components/icons'
-import { loadMessages, loadProfile, saveMessages, loadApiSetting, loadChatBgs, loadStickers, saveStickers, uid, patchFriendMsg, updateWallet, addBill, loadWallet } from '../store'
+import { appendMessage, loadMessages, loadProfile, saveMessages, loadApiSetting, loadChatBgs, loadStickers, saveStickers, uid, patchFriendMsg, updateWallet, addBill, loadWallet } from '../store'
 import { AiError, aiStream, chatUrl } from '../utils/ai'
 import { friendMemoryContext, maybeAutoSummarize } from '../utils/memory'
 import { fileToAvatar, fileToPhoto } from '../utils/image'
@@ -64,7 +64,7 @@ const splitBurst = (text: string, n: number): string[] => {
   const parts = text
     .split(/\s*\|\|\|\s*/)
     .map((s) => s.trim())
-    .filter(Boolean)
+    .filter((s) => s && !SEG_PUNCT.test(s))
   if (parts.length > 1 || n <= 1) return parts
   const sentences = text.replace(/\n+/g, '。').match(/[^。！？!?~…]+[。！？!?~…]?/g) ?? []
   const cleaned = sentences.map((s) => s.trim()).filter(Boolean)
@@ -81,7 +81,7 @@ function msgWidth(text: string): number {
   return text.length * 15 + 26
 }
 
-const CONTENT_RE = /\[表情[:：]([^\[\]]{1,12})\]|\[位置[:：]([^\[\]]{1,20})\]|\[文字图片[:：]([^\[\]]{1,60})\]|\[红包[:：]([^\[\]]{1,30})\]|\[转账[:：]([^\[\]]{1,30})\]/g
+const CONTENT_RE = /\[表情[:：]([^\[\]]{1,12})\]|\[位置[:：]([^\[\]]{1,20})\]|\[文字图片[:：]([^\[\]]{1,60})\]|\[红包[:：]([^\[\]]{1,30})\]|\[转账[:：]([^\[\]]{1,30})\]|\[亲属卡[:：]([^\[\]]{1,40})\]/g
 
 type StickerFrag =
   | { t: 'text'; v: string }
@@ -184,7 +184,7 @@ function cleanSeg(s: string, stripLead = false): string {
   return t
 }
 
-function splitReplyMsgs(part: string, stickers: Sticker[], friendId: string): Message[] {
+function splitReplyMsgs(part: string, stickers: Sticker[], friendId: string, friendName: string): Message[] {
   const out: Message[] = []
   const mk = (extra: Partial<Message>): Message => ({ id: uid(), friendId, from: 'friend', text: '', time: Date.now(), ...extra })
   let last = 0
@@ -211,6 +211,28 @@ function splitReplyMsgs(part: string, stickers: Sticker[], friendId: string): Me
       const bl = (blessing || '恭喜发财，大吉大利').trim()
       if (amount > 0) out.push(mk({ text: `[红包:${bl}|${amount}]`, redpacket: { amount, blessing: bl, status: '待领取' } }))
       else out.push(mk({ text: m[0] }))
+    } else if (m[6] !== undefined) {
+      const raw = m[6]
+      const [first, second] = raw.split('|')
+      const numRe = /(\d+(?:\.\d{1,2})?)/
+      const numOf = (s: string) => {
+        const mm = numRe.exec(s || '')
+        return mm ? Math.round(Number(mm[1]) * 100) / 100 : 0
+      }
+      const clean = (s: string) => (s || '').replace(numRe, '').replace(/元|额度|每月/g, '').replace(/^[：:\s]+/, '').trim()
+      let amount = numOf(first)
+      let remark = clean(second)
+      if (amount <= 0) {
+        amount = numOf(second)
+        remark = clean(first) || remark
+      }
+      if (amount > 0 && amount <= 3000) {
+        const card: RelativeCard = { id: uid(), friendId, friendName, monthlyLimit: amount, used: 0, direction: 'received', status: 'pending', createdAt: Date.now() }
+        updateWallet((x) => ({ ...x, relativeCards: [...x.relativeCards, card] }))
+        out.push(mk({ text: remark || `${friendName}赠送的亲属卡`, relativeCard: { cardId: card.id, status: '待领取' } }))
+      } else {
+        out.push(mk({ text: m[0] }))
+      }
     } else {
       const [amountRaw, note] = m[5].split('|')
       const amount = Math.round(Number(amountRaw) * 100) / 100
@@ -222,7 +244,7 @@ function splitReplyMsgs(part: string, stickers: Sticker[], friendId: string): Me
   }
   const tail = cleanSeg(part.slice(last), true)
   if (tail) out.push(mk({ text: tail }))
-  return out.length > 0 ? out : [mk({ text: part.trim() })]
+  return out
 }
 
 export default function Chat({
@@ -291,15 +313,24 @@ export default function Chat({
   const [queuedCount, setQueuedCount] = useState(0)
   const [rpOpen, setRpOpen] = useState<{ msg: Message; phase: 'cover' | 'opened' } | null>(null)
   const [tfConfirm, setTfConfirm] = useState<Message | null>(null)
+  const [rcOpen, setRcOpen] = useState<{ msg: Message; phase: 'cover' | 'claimed' } | null>(null)
 
   const patchMsg = (id: string, patch: Partial<Message>) => {
     patchFriendMsg(friend.id, id, patch)
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))
   }
 
-  const rcCardLimit = (m: Message) => {
-    const rc = loadWallet().relativeCards.find((c) => c.id === m.relativeCard?.cardId)
-    return rc ? formatMoney(rc.monthlyLimit) : ''
+  const rcCardOf = (m: Message) => {
+    const cid = m.relativeCard?.cardId
+    if (!cid) return undefined
+    return loadWallet().relativeCards.find((c) => c.id === cid)
+  }
+
+  const rcDesc = (m: Message) => {
+    const c = rcCardOf(m)
+    if (!c) return m.text || '亲属卡'
+    const who = m.from === 'me' ? friend.name : c.friendName || friend.name
+    return c.direction === 'received' ? `来自${who} · 每月额度 ¥${formatMoney(c.monthlyLimit)}` : `赠送给${who} · 每月额度 ¥${formatMoney(c.monthlyLimit)}`
   }
 
   const openRedPacket = (m: Message) => {
@@ -317,10 +348,26 @@ export default function Chat({
       updateWallet((x) => ({ ...x, balance: Math.round((x.balance + rp.amount) * 100) / 100 }))
       addBill({ kind: '红包', title: `${friend.name}的红包`, amount: rp.amount, status: '已存入零钱', friendName: friend.name, note: rp.blessing })
       patchMsg(src.id, { redpacket: next.redpacket })
+      const recv: Message = { id: uid(), friendId: friend.id, from: 'me', text: '', time: Date.now(), receipt: { kind: 'redpacket', amount: rp.amount, srcMsgId: src.id } }
+      appendMessage(recv)
+      setMessages((prev) => [...prev, recv])
       showHint(`已领取 ¥${formatMoney(rp.amount)}`)
     }
     setRpOpen({ msg: next, phase: 'opened' })
     onOpenRedPacketDetail(friend.id, src.id)
+  }
+
+  const refundRedPacket = () => {
+    const src = rpOpen?.msg
+    if (!src?.redpacket) return
+    if (src.from === 'friend' && src.redpacket.status === '待领取') {
+      patchMsg(src.id, { redpacket: { ...src.redpacket, status: '已退还' } })
+      const recv: Message = { id: uid(), friendId: friend.id, from: 'me', text: `已退还${friend.name}的红包`, time: Date.now() }
+      appendMessage(recv)
+      setMessages((prev) => [...prev, recv])
+      showHint('已退还')
+    }
+    setRpOpen(null)
   }
 
   const openTransfer = (m: Message) => {
@@ -336,9 +383,67 @@ export default function Chat({
     updateWallet((x) => ({ ...x, balance: Math.round((x.balance + t.amount) * 100) / 100 }))
     addBill({ kind: '转账', title: `${friend.name}的转账`, amount: t.amount, status: '已存入零钱', friendName: friend.name, note: t.note })
     patchMsg(src.id, { transfer: { ...t, status: '已收款', confirmedAt: Date.now() } })
+    const recv: Message = { id: uid(), friendId: friend.id, from: 'me', text: '', time: Date.now(), receipt: { kind: 'transfer', amount: t.amount, srcMsgId: src.id } }
+    appendMessage(recv)
+    setMessages((prev) => [...prev, recv])
     setTfConfirm(null)
     showHint(`已收钱 ¥${formatMoney(t.amount)}`)
     onOpenTransferDetail(friend.id, src.id)
+  }
+
+  const refundTransfer = () => {
+    const src = tfConfirm
+    if (!src?.transfer) return
+    if (src.from === 'friend' && src.transfer.status === '待收款') {
+      patchMsg(src.id, { transfer: { ...src.transfer, status: '已退还' } })
+      const recv: Message = { id: uid(), friendId: friend.id, from: 'me', text: `已将转账退还给${friend.name}`, time: Date.now() }
+      appendMessage(recv)
+      setMessages((prev) => [...prev, recv])
+      showHint('已退还')
+    }
+    setTfConfirm(null)
+  }
+
+  const openRcCard = (m: Message) => {
+    if (!m.relativeCard) return
+    if (m.from === 'friend' && m.relativeCard.status === '待领取') setRcOpen({ msg: m, phase: 'cover' })
+    else onOpenRelativeCardDetail(m.relativeCard.cardId)
+  }
+
+  const claimRelativeCard = () => {
+    const src = rcOpen?.msg
+    if (!src?.relativeCard) return
+    const card = rcCardOf(src)
+    if (src.from === 'friend' && src.relativeCard.status === '待领取' && card && card.status === 'pending') {
+      updateWallet((x) => ({
+        ...x,
+        relativeCards: x.relativeCards.map((c) => (c.id === card.id ? { ...c, status: 'claimed', claimedAt: Date.now() } : c)),
+      }))
+      patchMsg(src.id, { relativeCard: { cardId: card.id, status: '已领取' } })
+      const recv: Message = { id: uid(), friendId: friend.id, from: 'me', text: '', time: Date.now(), receipt: { kind: 'rc', amount: card.monthlyLimit, srcMsgId: src.id, cardId: card.id } }
+      appendMessage(recv)
+      setMessages((prev) => [...prev, recv])
+      setRcOpen({ msg: { ...src, relativeCard: { cardId: card.id, status: '已领取' } }, phase: 'claimed' })
+      showHint(`已领用，每月额度 ¥${formatMoney(card.monthlyLimit)}`)
+    }
+  }
+
+  const refundRelativeCard = () => {
+    const src = rcOpen?.msg
+    if (!src?.relativeCard) return
+    const card = rcCardOf(src)
+    if (src.from === 'friend' && src.relativeCard.status === '待领取' && card && card.status === 'pending') {
+      updateWallet((x) => ({
+        ...x,
+        relativeCards: x.relativeCards.map((c) => (c.id === card.id ? { ...c, status: 'rejected', rejectedAt: Date.now() } : c)),
+      }))
+      patchMsg(src.id, { relativeCard: { cardId: card.id, status: '已退还' } })
+      const recv: Message = { id: uid(), friendId: friend.id, from: 'me', text: `已退还${card.friendName || friend.name}赠送的亲属卡`, time: Date.now() }
+      appendMessage(recv)
+      setMessages((prev) => [...prev, recv])
+      showHint('已退还')
+    }
+    setRcOpen(null)
   }
   const listRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<number>(0)
@@ -573,9 +678,11 @@ export default function Chat({
         setTyping(false)
         setStreaming(null)
         const parts = splitBurst(text, friend.burstCount ?? 10)
-        const units = parts.map((p) => splitReplyMsgs(p, loadStickers(), friend.id))
+        const units = parts.map((p) => splitReplyMsgs(p, loadStickers(), friend.id, friend.name))
         for (let i = 0; i < units.length; i++) {
           for (let j = 0; j < units[i].length; j++) {
+            const unit = units[i][j]
+            if (!unit || !unit.text) continue
             if (j > 0) {
               await sleep(180 + Math.random() * 160)
             } else if (i > 0) {
@@ -583,7 +690,7 @@ export default function Chat({
               await sleep(300 + Math.random() * 400)
               setTyping(false)
             }
-            commit([...loadMessages().filter((x) => x.friendId === friend.id), units[i][j]])
+            commit([...loadMessages().filter((x) => x.friendId === friend.id), unit])
           }
         }
         busyRef.current = false
@@ -823,7 +930,7 @@ export default function Chat({
   }
 
   function menuWidthFor(m: Message): number {
-    const labels = m.from === 'me' ? ['复制', '编辑', '删除', '多选'] : ['复制', '引用', '编辑', '重新生成', '多选']
+    const labels = m.from === 'me' ? ['复制', '编辑', '删除', '多选'] : ['复制', '引用', '编辑', '重新生成', '删除', '多选']
     return 12 + labels.reduce((w, t) => w + msgWidth(t) + 1, 0)
   }
 
@@ -1009,7 +1116,7 @@ export default function Chat({
                       onContextMenu={onContextMenu(m)}
                       onClick={() => {
                         if (selectMode) toggleSelect(m.id)
-                        else if (m.relativeCard!.cardId) onOpenRelativeCardDetail(m.relativeCard!.cardId)
+                        else openRcCard(m)
                       }}
                     >
                       <div className="rela-card">
@@ -1020,7 +1127,7 @@ export default function Chat({
                         </span>
                         <span className="rela-card-texts">
                           <span className="rela-card-title">亲属卡</span>
-                          <span className="rela-card-sub">赠送给{friend.name} · 每月额度 ¥{rcCardLimit(m) || '--'}</span>
+                          <span className="rela-card-sub">{rcDesc(m)}</span>
                         </span>
                       </div>
                     </div>
@@ -1092,7 +1199,7 @@ export default function Chat({
                         </span>
                         <span className="rp-card-texts">
                           <span className="rp-card-blessing">{m.redpacket.blessing}</span>
-                          <span className="rp-card-kind">领取红包</span>
+                          <span className="rp-card-kind">{m.redpacket.status === '已领取' ? '已领取' : m.redpacket.status === '已退还' ? '已退还' : m.from === 'me' ? '等待领取' : '领取红包'}</span>
                         </span>
                       </div>
                     </div>
@@ -1534,6 +1641,11 @@ export default function Chat({
               <button className="rp-cover-open" onClick={claimRedPacket}>
                 开
               </button>
+              {rpOpen.msg.from === 'friend' && rpOpen.msg.redpacket?.status === '待领取' && (
+                <button className="rp-cover-refund" onClick={refundRedPacket}>
+                  退还红包
+                </button>
+              )}
               <span className="rp-cover-close" onClick={() => setRpOpen(null)}>
                 ×
               </span>
@@ -1542,23 +1654,82 @@ export default function Chat({
         </div>
       )}
 
-      <Modal
-        open={tfConfirm !== null}
-        title="确认收款"
-        buttons={[
-          { label: '暂不收款', onClick: () => setTfConfirm(null) },
-          { label: '确认收款', primary: true, onClick: confirmTransfer },
-        ]}
-      >
-        <div className="tf-confirm-body">
-          {tfConfirm && (
-            <>
-              <div className="tf-confirm-amount">¥{formatMoney(tfConfirm.transfer?.amount ?? 0)}</div>
-              <div className="tf-confirm-note">{friend.name}向你转账，收款后将存入零钱</div>
-            </>
+      {rcOpen && (
+        <div className="rp-overlay" onClick={() => setRcOpen(null)}>
+          {rcOpen.phase === 'claimed' ? (
+            <div className="rc-claimed" onClick={(e) => e.stopPropagation()}>
+              <span className="rc-claim-heart rc-claimed-heart">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="#fff">
+                  <path d="M12 20.6 4.9 14a4.8 4.8 0 0 1 .2-6.8 4.6 4.6 0 0 1 6.6.4l.3.4.3-.4a4.6 4.6 0 0 1 6.6-.4 4.8 4.8 0 0 1 .2 6.8L12 20.6Z" />
+                </svg>
+              </span>
+              <div className="rc-claimed-title">领用成功</div>
+              <div className="rc-claimed-name">{friend.name} 赠送的亲属卡</div>
+              <div className="rc-claimed-limit">每月额度 ¥{formatMoney(rcOpen.msg.relativeCard ? rcCardOf(rcOpen.msg)?.monthlyLimit ?? 0 : 0)}</div>
+              <div className="rc-claimed-tip">对方每月为你代付消费，可在「钱包-亲属卡」中查看和使用</div>
+              <div className="rc-claim-btns">
+                <button
+                  className="rc-btn-primary"
+                  onClick={() => {
+                    if (rcOpen.msg.relativeCard) onOpenRelativeCardDetail(rcOpen.msg.relativeCard.cardId)
+                  }}
+                >
+                  查看我的亲属卡
+                </button>
+                <button className="rc-btn-ghost" onClick={() => setRcOpen(null)}>
+                  完成
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="rc-claim" onClick={(e) => e.stopPropagation()}>
+              <span className="rc-claim-heart">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="#fff">
+                  <path d="M12 20.6 4.9 14a4.8 4.8 0 0 1 .2-6.8 4.6 4.6 0 0 1 6.6.4l.3.4.3-.4a4.6 4.6 0 0 1 6.6-.4 4.8 4.8 0 0 1 .2 6.8L12 20.6Z" />
+                </svg>
+              </span>
+              <div className="rc-claim-name">{friend.name} 赠送的亲属卡</div>
+              <div className="rc-claim-limit">每月额度 ¥{formatMoney(rcCardOf(rcOpen.msg)?.monthlyLimit ?? 0)}</div>
+              <div className="rc-claim-desc">领用后，对方每月为你代付消费，单月不超过此额度</div>
+              <div className="rc-claim-btns">
+                <button className="rc-btn-primary" onClick={claimRelativeCard}>
+                  领用
+                </button>
+                <button className="rc-btn-ghost" onClick={refundRelativeCard}>
+                  退还
+                </button>
+              </div>
+            </div>
           )}
         </div>
-      </Modal>
+      )}
+
+      {tfConfirm && (
+        <div className="rp-overlay tf-claim-overlay" onClick={() => setTfConfirm(null)}>
+          <div className="tf-claim" onClick={(e) => e.stopPropagation()}>
+            <div className="tf-claim-head">
+              <span className="tf-claim-avatar">
+                <Avatar name={friend.name} src={friend.avatar} size={52} />
+              </span>
+              <span className="tf-claim-from">{friend.name} 向你转账</span>
+              <span className="tf-claim-amount">
+                <small>¥</small>
+                {formatMoney(tfConfirm.transfer?.amount ?? 0)}
+              </span>
+              {tfConfirm.transfer?.note && tfConfirm.transfer.note !== '转账' && <span className="tf-claim-note">“{tfConfirm.transfer.note}”</span>}
+              <span className="tf-claim-tip">收款后将存入零钱，不收取手续费</span>
+            </div>
+            <div className="tf-claim-actions">
+              <button className="tf-claim-ok" onClick={confirmTransfer}>
+                收款
+              </button>
+              <button className="tf-claim-refund" onClick={refundTransfer}>
+                退还
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {menuFor && (
         <>
@@ -1602,14 +1773,12 @@ export default function Chat({
                 重新生成
               </button>
             )}
-            {menuFor.from === 'me' && (
-              <button
-                className="msg-menu-item danger"
-                onClick={() => deleteOne(menuFor)}
-              >
-                删除
-              </button>
-            )}
+            <button
+              className="msg-menu-item danger"
+              onClick={() => deleteOne(menuFor)}
+            >
+              删除
+            </button>
             <button
               className="msg-menu-item"
               onClick={() => enterSelect(menuFor)}

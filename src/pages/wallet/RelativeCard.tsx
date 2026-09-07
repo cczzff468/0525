@@ -13,6 +13,19 @@ const fmtFull = (t: number) => {
   return `${d.getFullYear()}年${p(d.getMonth() + 1)}月${p(d.getDate())}日 ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
+const rcStatusText = (c: RelativeCard) => {
+  if (c.direction === 'received') {
+    if (c.status === 'claimed') return '已领取'
+    if (c.status === 'rejected') return '已退还'
+    return '待领取'
+  }
+  if (c.status === 'claimed') return '对方已领取'
+  if (c.status === 'rejected') return '对方已退还'
+  return '待对方领取'
+}
+
+const rcSpendable = (c: RelativeCard) => c.status !== 'rejected' && (c.direction !== 'received' || c.status === 'claimed')
+
 export default function RelativeCardPage({
   onBack,
   onGiftSubmit,
@@ -148,10 +161,10 @@ export default function RelativeCardPage({
               <div className="relative-card-top">
                 <Avatar name={c.friendName} size={38} />
                 <div className="relative-card-info">
-                  <span className="relative-card-name">{c.friendName}的亲属卡</span>
+                  <span className="relative-card-name">{c.direction === 'received' ? `来自${c.friendName}的亲属卡` : `${c.friendName}的亲属卡`}</span>
                   <span className="relative-card-limit">每月上限 ¥{formatMoney(c.monthlyLimit)}</span>
                 </div>
-                {c.status === 'claimed' && <span className="relative-card-state">已领取</span>}
+                <span className={`relative-card-state ${c.status === 'claimed' ? '' : 'warn'}`}>{rcStatusText(c)}</span>
                 <button className="relative-card-unbind" onClick={(e) => { e.stopPropagation(); unbind(c) }}>
                   解绑
                 </button>
@@ -161,14 +174,16 @@ export default function RelativeCardPage({
               </div>
               <div className="relative-card-bottom">
                 <span className="relative-card-rest">本月剩余 ¥{formatMoney(Math.max(rest, 0))}</span>
-                <button
-                  className="relative-card-spend"
-                  onClick={() => {
-                    openSpend(c)
-                  }}
-                >
-                  记一笔消费
-                </button>
+                {rcSpendable(c) && (
+                  <button
+                    className="relative-card-spend"
+                    onClick={() => {
+                      openSpend(c)
+                    }}
+                  >
+                    记一笔消费
+                  </button>
+                )}
               </div>
             </div>
           )
@@ -274,7 +289,7 @@ export default function RelativeCardPage({
                   <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                 </svg>
               </div>
-              <div className="wd-rc-subject">给 {detailCard.friendName} 的亲属卡</div>
+              <div className="wd-rc-subject">{detailCard.direction === 'received' ? `来自 ${detailCard.friendName} 的亲属卡` : `给 ${detailCard.friendName} 的亲属卡`}</div>
               <div className="wd-rc-amount">
                 <span className="wd-rc-amount-label">每月可用额度</span>
                 <span className="wd-rc-amount-value">¥{formatMoney(detailCard.monthlyLimit)}</span>
@@ -290,11 +305,23 @@ export default function RelativeCardPage({
               <div className="wd-info-rows">
                 <div className="wd-info-row">
                   <span className="wd-info-label">当前状态</span>
-                  <span className={`wd-info-value ${detailCard.status === 'claimed' ? '' : 'wd-info-warn'}`}>{detailCard.status === 'claimed' ? '对方已领取' : '待对方领取'}</span>
+                  <span className={`wd-info-value ${detailCard.status === 'claimed' ? '' : 'wd-info-warn'}`}>
+                    {detailCard.direction === 'received'
+                      ? detailCard.status === 'claimed'
+                        ? '已领取，可使用'
+                        : detailCard.status === 'rejected'
+                          ? '已退还'
+                          : '待领取'
+                      : detailCard.status === 'claimed'
+                        ? '对方已领取'
+                        : detailCard.status === 'rejected'
+                          ? '对方已退还'
+                          : '待对方领取'}
+                  </span>
                 </div>
                 <div className="wd-info-row">
                   <span className="wd-info-label">扣款方式</span>
-                  <span className="wd-info-value">零钱</span>
+                  <span className="wd-info-value">{detailCard.direction === 'received' ? '由对方代付' : '零钱'}</span>
                 </div>
                 <div className="wd-info-row">
                   <span className="wd-info-label">创建时间</span>
@@ -304,6 +331,12 @@ export default function RelativeCardPage({
                   <div className="wd-info-row">
                     <span className="wd-info-label">领取时间</span>
                     <span className="wd-info-value">{fmtFull(detailCard.claimedAt)}</span>
+                  </div>
+                )}
+                {detailCard.status === 'rejected' && detailCard.rejectedAt && (
+                  <div className="wd-info-row">
+                    <span className="wd-info-label">退还时间</span>
+                    <span className="wd-info-value">{fmtFull(detailCard.rejectedAt)}</span>
                   </div>
                 )}
               </div>

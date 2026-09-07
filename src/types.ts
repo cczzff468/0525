@@ -34,8 +34,9 @@ export interface RelativeCard {
   monthlyLimit: number
   used: number
   direction: 'given' | 'received'
-  status?: 'pending' | 'claimed'
+  status?: 'pending' | 'claimed' | 'rejected'
   claimedAt?: number
+  rejectedAt?: number
   createdAt: number
 }
 
@@ -77,7 +78,7 @@ export interface Bill {
 export interface RedPacketInfo {
   amount: number
   blessing: string
-  status: '待领取' | '已领取'
+  status: '待领取' | '已领取' | '已退还'
   openedBy?: string
   openedAt?: number
 }
@@ -112,7 +113,7 @@ export interface Message {
   location?: { name: string; address?: string }
   redpacket?: RedPacketInfo
   transfer?: TransferInfo
-  relativeCard?: { cardId: string; status: '待领取' | '已领取' }
+  relativeCard?: { cardId: string; status: '待领取' | '已领取' | '已退还' }
   receipt?: { kind: 'redpacket' | 'transfer' | 'rc'; amount: number; srcMsgId: string; cardId?: string }
 }
 
