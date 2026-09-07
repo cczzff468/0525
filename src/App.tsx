@@ -13,6 +13,7 @@ import Settings from './pages/Settings'
 import ApiSettingPage from './pages/ApiSettingPage'
 import VisionApiPage from './pages/VisionApiPage'
 import VoiceApiPage from './pages/VoiceApiPage'
+import MemoryPage from './pages/MemoryPage'
 import { ChatIcon, ContactsIcon, DiscoverIcon, MeIcon } from './components/icons'
 import { loadFriends, loadMessages, loadUiState, saveFriends, saveMessages, saveUiState } from './store'
 import type { Friend, Message } from './types'
@@ -30,6 +31,7 @@ type View =
   | { name: 'apiSetting' }
   | { name: 'visionApi' }
   | { name: 'voiceApi' }
+  | { name: 'memory'; friendId?: string }
 
 const TABS: { key: Tab; label: string; icon: (active: boolean) => JSX.Element }[] = [
   { key: 'messages', label: '信息', icon: (a) => <ChatIcon active={a} /> },
@@ -46,7 +48,7 @@ function initialState(): { tab: Tab; view: View } {
   if (savedView && typeof savedView.name === 'string') {
     if (savedView.name === 'chat') {
       view = loadFriends().some((f) => f.id === savedView.friendId) ? savedView : { name: 'tabs' }
-    } else if (['moments', 'myProfile', 'settings', 'apiSetting', 'visionApi', 'voiceApi'].includes(savedView.name)) {
+    } else if (['moments', 'myProfile', 'settings', 'apiSetting', 'visionApi', 'voiceApi', 'memory'].includes(savedView.name)) {
       view = savedView
     }
   }
@@ -129,7 +131,7 @@ export default function App() {
   } else if (view.name === 'moments') {
     content = <Moments onBack={backToTabs} />
   } else if (view.name === 'myProfile') {
-    content = <MyProfile onBack={backToTabs} onEditPersona={(personaId) => setView({ name: 'addPersona', personaId })} onOpenMoments={() => setView({ name: 'moments' })} />
+    content = <MyProfile onBack={backToTabs} onEditPersona={(personaId) => setView({ name: 'addPersona', personaId })} onOpenMoments={() => setView({ name: 'moments' })} onOpenMemory={() => setView({ name: 'memory' })} />
   } else if (view.name === 'addPersona') {
     content = <AddPersona onBack={() => setView({ name: 'myProfile' })} personaId={view.personaId} />
   } else if (view.name === 'settings') {
@@ -147,6 +149,15 @@ export default function App() {
     content = <VisionApiPage onBack={() => setView({ name: 'settings' })} />
   } else if (view.name === 'voiceApi') {
     content = <VoiceApiPage onBack={() => setView({ name: 'settings' })} />
+  } else if (view.name === 'memory') {
+    content = (
+      <MemoryPage
+        friendId={view.friendId}
+        onBack={backToTabs}
+        onPickFriend={(id) => setView({ name: 'memory', friendId: id })}
+        onClearFriend={() => setView({ name: 'memory' })}
+      />
+    )
   } else {
     content = (
       <div className="tab-shell">
@@ -164,7 +175,7 @@ export default function App() {
             />
           )}
           {tab === 'discover' && <Discover onOpenMoments={() => setView({ name: 'moments' })} />}
-          {tab === 'me' && <Me onOpenProfile={() => setView({ name: 'myProfile' })} onOpenSettings={() => setView({ name: 'settings' })} onOpenMoments={() => setView({ name: 'moments' })} />}
+          {tab === 'me' && <Me onOpenProfile={() => setView({ name: 'myProfile' })} onOpenSettings={() => setView({ name: 'settings' })} onOpenMoments={() => setView({ name: 'moments' })} onOpenMemory={() => setView({ name: 'memory' })} />}
         </div>
         <nav className="tabbar">
           {TABS.map((t) => (

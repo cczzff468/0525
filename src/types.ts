@@ -106,6 +106,36 @@ export interface VoiceSetting {
   selectedId: string
 }
 
+export interface MemoryFragment {
+  id: string
+  friendId: string
+  content: string
+  msgCount: number
+  createdAt: number
+  source: 'auto' | 'manual'
+}
+
+export interface LongTermMemory {
+  id: string
+  friendId: string
+  content: string
+  createdAt: number
+  source: 'auto' | 'manual'
+  baseFragmentIds: string[]
+}
+
+export interface MemorySetting {
+  fragmentEvery: number
+  longTermEvery: number
+}
+
+export interface MemoryData {
+  fragments: MemoryFragment[]
+  longTerm: LongTermMemory[]
+  settings: MemorySetting
+  lastMsgId: Record<string, string>
+}
+
 export interface ApiSetting {
   baseUrl: string
   apiKey: string

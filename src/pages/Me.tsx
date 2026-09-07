@@ -5,6 +5,7 @@ const ROWS = [
   { label: '服务', bg: '#34c759', d: 'M12 3.5 20 8v8l-8 4.5L4 16V8l8-4.5Z' },
   { label: '收藏', bg: '#ff9500', d: 'm12 4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8L12 4Z' },
   { label: '朋友圈', bg: '#007aff', d: 'M12 4a8 8 0 1 1-8 8' },
+  { label: '记忆匣子', bg: '#af52de', d: 'M9 3.5h6M7.5 5.5h9a1 1 0 0 1 1 1V19a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 19V6.5a1 1 0 0 1 1-1ZM12 10c-1.8 0-3 1-3 2.4 0 2.1 3 2.1 3 3.6m0-6c1.8 0 3 1 3 2.4 0 2.1-3 2.1-3 3.6m0-6v9' },
   { label: '卡包', bg: '#ff2d55', d: 'M4 9h16v10H4V9Zm0 4h16' },
   { label: '表情', bg: '#ffd60a', d: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm-2.5 8h5' },
 ]
@@ -13,10 +14,12 @@ export default function Me({
   onOpenProfile,
   onOpenSettings,
   onOpenMoments,
+  onOpenMemory,
 }: {
   onOpenProfile: () => void
   onOpenSettings: () => void
   onOpenMoments: () => void
+  onOpenMemory: () => void
 }) {
   const profile = loadProfile()
   const avatar = profile.avatar || 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="120" height="120" fill="#c7c7cc"/><text x="60" y="64" font-size="54" fill="#fff" text-anchor="middle" dominant-baseline="central" font-family="sans-serif">我</text></svg>')
@@ -49,6 +52,7 @@ export default function Me({
               className="row"
               onClick={() => {
                 if (r.label === '朋友圈') onOpenMoments()
+                else if (r.label === '记忆匣子') onOpenMemory()
               }}
             >
               <div className="row-icon row-icon-grad" style={{ background: r.bg }}>

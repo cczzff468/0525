@@ -4,6 +4,7 @@ import { Avatar, Modal, formatTime, formatTimeFull } from '../components/common'
 import { BackIcon, SendIcon, VideoIcon, PlusBadgeIcon, MicIcon } from '../components/icons'
 import { loadMessages, loadProfile, saveMessages, loadApiSetting, uid } from '../store'
 import { AiError, aiStream } from '../utils/ai'
+import { friendMemoryContext, maybeAutoSummarize } from '../utils/memory'
 
 interface MenuPos {
   x: number
@@ -203,12 +204,13 @@ export default function Chat({
         setStreaming((prev) => (prev ?? '') + chunk)
       }
       try {
-        const { text, truncated } = await aiStream(history, friend, loadProfile(), onDelta)
+        const { text, truncated } = await aiStream(history, friend, loadProfile(), onDelta, friendMemoryContext(friend.id))
         setTyping(false)
         setStreaming(null)
         commit([...msgsRef.current, { id: uid(), friendId: friend.id, from: 'friend', text, time: Date.now() }])
         busyRef.current = false
         if (truncated) setErrModal({ title: '回复被截断', desc: ERR_TEXT.toolong.desc })
+        maybeAutoSummarize(friend.id).catch(() => {})
       } catch (err) {
         showError(err)
       }

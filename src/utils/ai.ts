@@ -37,7 +37,12 @@ export function modelsUrl(url: string): string {
   return `${base}/models`
 }
 
-function systemPrompt(friend: Friend, me: Profile, globalPrompt?: string): string {
+function systemPrompt(
+  friend: Friend,
+  me: Profile,
+  globalPrompt?: string,
+  memory?: { longTerm?: string; fragments?: string[] }
+): string {
   const lines = [
     `你是${friend.name}，${friend.gender}，${friend.age}岁。`,
     friend.occupation ? `你的职业是${friend.occupation}。` : '',
@@ -46,9 +51,17 @@ function systemPrompt(friend: Friend, me: Profile, globalPrompt?: string): strin
     `你正在和${me.name}（${me.gender}，${me.age > 0 ? `${me.age}岁` : '年龄未知'}）用手机聊天。`,
     me.bio ? `对方的人设与背景：${me.bio}。聊天时可以把对方当作这个人来对待，可以自然地提起对方的爱好。` : '',
     '用简体中文回复，口语化，像真人发消息，每次1-2句话，符合你的人设语气，不要出现"作为AI"之类的表述。',
-    friend.prompt?.trim() ? `这位联系人的专属聊天规则（必须遵守）：\n${friend.prompt.trim()}` : '',
-    globalPrompt?.trim() ? `全局聊天规则（必须遵守，与本规则冲突时以此为准）：\n${globalPrompt.trim()}` : '',
   ]
+  if (memory?.longTerm) {
+    lines.push(`【长期记忆】以下是你们过去相处的核心记忆，聊天时保持连贯，可以自然提起：\n${memory.longTerm}`)
+  }
+  if (memory?.fragments && memory.fragments.length > 0) {
+    lines.push(`【近期对话记忆】以下是最近聊过的要点：\n${memory.fragments.map((f) => `- ${f}`).join('\n')}`)
+  }
+  lines.push(
+    friend.prompt?.trim() ? `这位联系人的专属聊天规则（必须遵守）：\n${friend.prompt.trim()}` : '',
+    globalPrompt?.trim() ? `全局聊天规则（必须遵守，与本规则冲突时以此为准）：\n${globalPrompt.trim()}` : ''
+  )
   return lines.filter(Boolean).join('\n')
 }
 
@@ -82,7 +95,8 @@ export async function aiStream(
   history: { role: 'user' | 'assistant'; content: string }[],
   friend: Friend,
   me: Profile,
-  onDelta: (chunk: string) => void
+  onDelta: (chunk: string) => void,
+  memory?: { longTerm?: string; fragments?: string[] }
 ): Promise<{ text: string; truncated: boolean }> {
   const cfg = loadApiSetting()
   if (!cfg.baseUrl.trim() || !cfg.model.trim()) throw new AiError('noapi')
@@ -93,7 +107,7 @@ export async function aiStream(
     temperature: cfg.temperature,
     max_tokens: cfg.maxTokens,
     messages: [
-      { role: 'system', content: systemPrompt(friend, me, cfg.globalPrompt) },
+      { role: 'system', content: systemPrompt(friend, me, cfg.globalPrompt, memory) },
       ...history.slice(-20),
     ],
   }

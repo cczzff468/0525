@@ -7,10 +7,12 @@ export default function MyProfile({
   onBack,
   onEditPersona,
   onOpenMoments,
+  onOpenMemory,
 }: {
   onBack: () => void
   onEditPersona: (personaId?: string) => void
   onOpenMoments: () => void
+  onOpenMemory: () => void
 }) {
   const [tick, setTick] = useState(0)
   const personas = loadPersonas()
@@ -116,6 +118,11 @@ export default function MyProfile({
           </div>
           <button className="row" onClick={onOpenMoments}>
             <span className="row-title form-label">朋友圈</span>
+            <span className="row-value" />
+            <Chevron />
+          </button>
+          <button className="row" onClick={onOpenMemory}>
+            <span className="row-title form-label">记忆匣子</span>
             <span className="row-value" />
             <Chevron />
           </button>

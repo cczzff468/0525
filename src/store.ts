@@ -1,4 +1,4 @@
-import type { ApiSetting, Friend, Message, MomentsPost, Persona, Profile, VoiceConfig } from './types'
+import type { ApiSetting, Friend, MemoryData, MemorySetting, Message, MomentsPost, Persona, Profile, VoiceConfig } from './types'
 
 const FRIENDS_KEY = 'im.friends'
 const MSGS_KEY = 'im.messages'
@@ -9,8 +9,9 @@ const UI_KEY = 'im.ui'
 const API_KEY_STORE = 'im.api'
 const PERSONAS_KEY = 'im.personas'
 const ACTIVE_PERSONA_KEY = 'im.activePersona'
+const MEMORY_KEY = 'im.memory'
 
-const ALL_KEYS = [FRIENDS_KEY, MSGS_KEY, PROFILE_KEY, MOMENTS_KEY, COVER_KEY, UI_KEY, API_KEY_STORE, PERSONAS_KEY, ACTIVE_PERSONA_KEY]
+const ALL_KEYS = [FRIENDS_KEY, MSGS_KEY, PROFILE_KEY, MOMENTS_KEY, COVER_KEY, UI_KEY, API_KEY_STORE, PERSONAS_KEY, ACTIVE_PERSONA_KEY, MEMORY_KEY]
 const DB_NAME = 'ios-im'
 const STORE_NAME = 'kv'
 
@@ -236,6 +237,24 @@ export function loadApiSetting(): ApiSetting {
 
 export function saveApiSetting(setting: ApiSetting) {
   write(API_KEY_STORE, setting)
+}
+
+export function loadMemoryData(): MemoryData {
+  const d = read<Partial<MemoryData>>(MEMORY_KEY, {})
+  const s = (d.settings ?? {}) as Partial<MemorySetting>
+  return {
+    fragments: Array.isArray(d.fragments) ? d.fragments : [],
+    longTerm: Array.isArray(d.longTerm) ? d.longTerm : [],
+    settings: {
+      fragmentEvery: [10, 20, 30, 40, 50].includes(s.fragmentEvery as number) ? (s.fragmentEvery as number) : 20,
+      longTermEvery: [3, 5, 7, 10].includes(s.longTermEvery as number) ? (s.longTermEvery as number) : 5,
+    },
+    lastMsgId: d.lastMsgId ?? {},
+  }
+}
+
+export function saveMemoryData(d: MemoryData) {
+  write(MEMORY_KEY, d)
 }
 
 export function loadPersonas(): Persona[] {

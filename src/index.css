@@ -2980,3 +2980,139 @@ button:disabled {
   font-size: 12px;
   color: #9a9aa0;
 }
+
+/* ===== 记忆匣子 ===== */
+.memory-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.memory-friend-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 4px 14px;
+}
+
+.memory-friend-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: #111;
+}
+
+.memory-friend-sub {
+  font-size: 12px;
+  color: #9a9aa0;
+  margin-top: 2px;
+}
+
+.memory-tabs {
+  display: flex;
+  background: #e9e9eb;
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+  margin-bottom: 14px;
+}
+
+.memory-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: #3c3c43;
+  padding: 8px 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.memory-tab.active {
+  background: #fff;
+  color: #0a84ff;
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.memory-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 13px 15px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.memory-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.memory-card-time {
+  font-size: 12px;
+  color: #9a9aa0;
+}
+
+.memory-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 9px;
+}
+
+.memory-badge.auto {
+  background: #e8f3ff;
+  color: #0a84ff;
+}
+
+.memory-badge.manual {
+  background: #e9f9ee;
+  color: #34c759;
+}
+
+.memory-card-body {
+  margin: 0;
+}
+
+.memory-line {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.memory-card-foot {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #c0c0c4;
+}
+
+.memory-clear-btn {
+  margin-top: 10px;
+  border: none;
+  background: none;
+  color: #ff3b30;
+  font-size: 13px;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.memory-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.memory-seg {
+  align-self: flex-start;
+}
+
+.memory-seg .seg-item {
+  min-width: 46px;
+}
