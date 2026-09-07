@@ -3179,7 +3179,6 @@ button:disabled {
 .memory-page .row:hover {
   background: rgba(0, 136, 255, 0.04);
 }
-}
 
 .memory-seg {
   align-self: flex-start;
